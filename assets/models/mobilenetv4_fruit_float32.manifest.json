@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "model": {
+    "assetPath": "assets/models/mobilenetv4_fruit_float32.tflite",
+    "sha256": "5f131720b8d4b820ec9584e4f8ffab9ac2951e1e8d145363070bf5f2afcca5a2",
+    "version": "mobilenetv4-fruit-enhanced-b11167b",
+    "sourceRepository": "https://github.com/javieAlfaro/fruit_enhancedmodel_mobilenetv4",
+    "sourceCommit": "b11167bd1c69dad3f17d1fafd608fbb861c6e2ae"
+  },
+  "input": {
+    "name": "input",
+    "shape": [1, 224, 224, 3],
+    "dataType": "float32",
+    "colorSpace": "rgb",
+    "squareTransform": "center_crop",
+    "resizeInterpolation": "bilinear",
+    "pixelScale": 255.0,
+    "mean": [0.485, 0.456, 0.406],
+    "standardDeviation": [0.229, 0.224, 0.225]
+  },
+  "output": {
+    "name": "output",
+    "shape": [1, 9],
+    "dataType": "float32",
+    "interpretation": "logits",
+    "activation": "softmax",
+    "orderedLabels": [
+      "overripe-banana",
+      "overripe-mango",
+      "overripe-papaya",
+      "ripe-banana",
+      "ripe-mango",
+      "ripe-papaya",
+      "unripe-banana",
+      "unripe-mango",
+      "unripe-papaya"
+    ]
+  },
+  "confidencePolicy": {
+    "automaticRetakeEnabled": false,
+    "threshold": null,
+    "reason": "The model handoff does not yet include a validated low-confidence threshold."
+  },
+  "limitations": {
+    "cultivarMappingValidated": false,
+    "knownFixtureAvailable": false,
+    "unsupportedInputRejectionAvailable": false,
+    "shelfLifeEvidenceAvailable": false
+  }
+}

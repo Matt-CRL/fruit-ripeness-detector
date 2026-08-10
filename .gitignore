@@ -1,0 +1,68 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Keep editor-specific state local.
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+/tmp/
+
+# Packaged artifacts are rebuilt locally or in CI
+*.apk
+*.aab
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Local compile-time configuration
+/config/*.json
+!/config/example.json
+
+# Local test media is not part of the team repository
+/assets/test_images/
+
+# Android signing material
+/android/key.properties
+/android/*.jks
+/android/*.keystore
