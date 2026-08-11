@@ -353,6 +353,10 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       updatedAt: record.updatedAt,
       deletedAt: Value(record.deletedAt),
       syncState: Value(PersistenceCodecs.encodeSyncState(record.syncState)),
+      remoteRevision: Value(record.remoteRevision),
+      imageSyncState: Value(
+        PersistenceCodecs.encodeImageSyncState(record.imageSyncState),
+      ),
     );
   }
 
@@ -396,6 +400,10 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       updatedAt: row.updatedAt.toUtc(),
       deletedAt: row.deletedAt?.toUtc(),
       syncState: PersistenceCodecs.decodeSyncState(row.syncState),
+      remoteRevision: row.remoteRevision,
+      imageSyncState: PersistenceCodecs.decodeImageSyncState(
+        row.imageSyncState,
+      ),
     );
   }
 }

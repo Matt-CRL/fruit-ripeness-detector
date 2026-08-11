@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
+import 'package:kami/features/auth/application/current_owner_provider.dart';
 import 'package:kami/features/history/data/app_private_retained_scan_image_store.dart';
 import 'package:kami/features/history/data/drift_scan_record_repository.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/scan_record_repository.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
+import 'package:kami/features/sync/data/local_sync_store.dart';
 
 typedef UtcNow = DateTime Function();
 
@@ -19,15 +22,28 @@ final saveScanResultUseCaseProvider = Provider<SaveScanResultUseCase>((ref) {
     ref.watch(scanRecordRepositoryProvider),
     ref.watch(retainedScanImageStoreProvider),
     ref.watch(utcNowProvider),
+    ref.watch(currentOwnerIdProvider),
+    () async =>
+        (await ref.read(localSyncStoreProvider).readSettings())
+            .imageUploadConsent ==
+        true,
   );
 });
 
 final class SaveScanResultUseCase {
-  const SaveScanResultUseCase(this._repository, this._imageStore, this._utcNow);
+  const SaveScanResultUseCase(
+    this._repository,
+    this._imageStore,
+    this._utcNow, [
+    this._ownerId,
+    this._photoConsent,
+  ]);
 
   final ScanRecordRepository _repository;
   final RetainedScanImageStore _imageStore;
   final UtcNow _utcNow;
+  final String? _ownerId;
+  final Future<bool> Function()? _photoConsent;
 
   Future<SavedScanRecord> execute({
     required ScanPreview preview,
@@ -49,8 +65,12 @@ final class SaveScanResultUseCase {
       scanId: scanId,
     );
     final now = _utcNow();
+    final queuePhoto =
+        _ownerId != null &&
+        (await (_photoConsent?.call() ?? Future.value(false)));
     final record = SavedScanRecord(
       id: scanId,
+      ownerId: _ownerId,
       fruit: preview.classification.fruit,
       ripeness: preview.classification.ripeness,
       modelConfidence: preview.classification.modelConfidence,
@@ -60,7 +80,12 @@ final class SaveScanResultUseCase {
       localImageRelativePath: retained.relativePath,
       createdAt: now,
       updatedAt: now,
-      syncState: LocalSyncState.localOnly,
+      syncState: _ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending,
+      imageSyncState: queuePhoto
+          ? ImageSyncState.pendingUpload
+          : ImageSyncState.localOnly,
     );
 
     try {

@@ -1,4 +1,5 @@
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/core/persistence/persistence_validation.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
@@ -14,6 +15,8 @@ final class SavedScanRecord {
     required this.createdAt,
     required this.updatedAt,
     required this.syncState,
+    this.remoteRevision = 0,
+    this.imageSyncState = ImageSyncState.localOnly,
     this.ownerId,
     this.batchId,
     this.localImageRelativePath,
@@ -49,6 +52,13 @@ final class SavedScanRecord {
       updatedAt: updatedAt,
       deletedAt: deletedAt,
     );
+    if (remoteRevision < 0) {
+      throw ArgumentError.value(
+        remoteRevision,
+        'remoteRevision',
+        'must not be negative',
+      );
+    }
   }
 
   final String id;
@@ -66,6 +76,8 @@ final class SavedScanRecord {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final LocalSyncState syncState;
+  final int remoteRevision;
+  final ImageSyncState imageSyncState;
 
   static void _validateShelfLife(ShelfLifeEstimate value) {
     switch (value) {

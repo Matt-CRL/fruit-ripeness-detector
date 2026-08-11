@@ -59,6 +59,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.createAccount,
         builder: (context, state) => const CreateAccountScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return MainShell(navigationShell: navigationShell);

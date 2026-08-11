@@ -11,6 +11,10 @@ abstract interface class StartupPreferences {
 
   Future<void> completeGuestOnboarding();
 
+  Future<bool> isAccountOnboardingCompleted(String userId);
+
+  Future<void> completeAccountOnboarding(String userId);
+
   Future<void> resetGuestEntry();
 
   Future<AppearanceMode> readAppearanceMode();

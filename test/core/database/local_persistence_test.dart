@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'schema version four opens with foreign keys and matches Drift',
+    'schema version five opens with foreign keys and matches Drift',
     () async {
       final foreignKeys = await database
           .customSelect('PRAGMA foreign_keys')
@@ -58,9 +58,9 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
 
-      expect(database.schemaVersion, 4);
+      expect(database.schemaVersion, 5);
       expect(foreignKeys.data.values.single, 1);
-      expect(userVersion.data.values.single, 4);
+      expect(userVersion.data.values.single, 5);
       await database.validateDatabaseSchema();
     },
   );
@@ -122,9 +122,119 @@ void main() {
           .data
           .values
           .single,
-      4,
+      5,
     );
   });
+
+  test(
+    'version four account data migrates to sync schema without loss',
+    () async {
+      await database.close();
+      final migrated = AppDatabase(
+        NativeDatabase.memory(
+          setup: (rawDatabase) {
+            rawDatabase.execute('''
+            CREATE TABLE batches (
+              id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
+              name TEXT NOT NULL, fruit_type TEXT NOT NULL,
+              created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+              deleted_at INTEGER NULL,
+              sync_state TEXT NOT NULL DEFAULT 'local_only'
+            )
+          ''');
+            rawDatabase.execute('''
+            CREATE TABLE scan_records (
+              id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
+              batch_id TEXT NULL REFERENCES batches(id),
+              fruit_type TEXT NOT NULL, ripeness_stage TEXT NOT NULL,
+              model_confidence REAL NOT NULL, model_version TEXT NOT NULL,
+              result_origin TEXT NOT NULL DEFAULT 'demo',
+              shelf_life_status TEXT NOT NULL,
+              shelf_life_minimum INTEGER NULL,
+              shelf_life_maximum INTEGER NULL, shelf_life_unit TEXT NULL,
+              shelf_life_guidance TEXT NULL, shelf_life_reason TEXT NULL,
+              shelf_life_evidence_version TEXT NOT NULL,
+              local_image_relative_path TEXT NULL,
+              remote_image_key TEXT NULL,
+              created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+              deleted_at INTEGER NULL,
+              sync_state TEXT NOT NULL DEFAULT 'local_only'
+            )
+          ''');
+            rawDatabase.execute('''
+            CREATE TABLE orders (
+              id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
+              batch_id TEXT NOT NULL REFERENCES batches(id),
+              customer_name TEXT NOT NULL, delivery_address TEXT NOT NULL,
+              delivery_date INTEGER NOT NULL, status TEXT NOT NULL,
+              created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+              deleted_at INTEGER NULL,
+              sync_state TEXT NOT NULL DEFAULT 'local_only'
+            )
+          ''');
+            rawDatabase.execute('''
+            CREATE TABLE app_settings (
+              id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+              image_upload_consent INTEGER NULL,
+              consent_version TEXT NULL,
+              last_successful_sync_at INTEGER NULL
+            )
+          ''');
+            rawDatabase.execute('''
+            INSERT INTO batches VALUES (
+              '$_batchOneId', NULL, 'Preserved batch', 'carabao_mango',
+              1785484800, 1785484800, NULL, 'local_only'
+            )
+          ''');
+            rawDatabase.execute('''
+            INSERT INTO scan_records VALUES (
+              '$_scanOneId', NULL, '$_batchOneId', 'carabao_mango', 'ripe',
+              0.91, 'preserved-model', 'on_device_model', 'available',
+              2, 4, 'days', 'Preserved guidance', NULL, 'evidence-v1',
+              'history_images/$_scanOneId.jpg', NULL,
+              1785484800, 1785484800, NULL, 'local_only'
+            )
+          ''');
+            rawDatabase.execute('''
+            INSERT INTO orders VALUES (
+              '$_orderOneId', NULL, '$_batchOneId', 'Preserved customer',
+              'Preserved address', 1785571200, 'pending',
+              1785484800, 1785484800, NULL, 'local_only'
+            )
+          ''');
+            rawDatabase.execute(
+              "INSERT INTO app_settings VALUES (1, 0, 'consent-v1', NULL)",
+            );
+            rawDatabase.userVersion = 4;
+          },
+        ),
+      );
+      addTearDown(migrated.close);
+
+      final batch = await migrated.select(migrated.batches).getSingle();
+      final scan = await migrated.select(migrated.scanRecords).getSingle();
+      final order = await migrated.select(migrated.orders).getSingle();
+      final settings = await migrated.select(migrated.appSettings).getSingle();
+
+      expect(batch.name, 'Preserved batch');
+      expect(scan.modelVersion, 'preserved-model');
+      expect(order.customerName, 'Preserved customer');
+      expect(settings.imageUploadConsent, isFalse);
+      expect(batch.remoteRevision, 0);
+      expect(scan.remoteRevision, 0);
+      expect(scan.imageSyncState, 'local_only');
+      expect(order.remoteRevision, 0);
+      expect(settings.remoteRevision, 0);
+      expect(settings.syncState, 'local_only');
+      expect(
+        (await migrated.customSelect('PRAGMA user_version').getSingle())
+            .data
+            .values
+            .single,
+        5,
+      );
+    },
+  );
 
   test('UUID generator creates valid client-side identifiers', () {
     final id = const UuidEntityIdGenerator().nextId();

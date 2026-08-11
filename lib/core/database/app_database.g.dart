@@ -99,6 +99,19 @@ class $BatchesTable extends Batches with TableInfo<$BatchesTable, BatchRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant('local_only'),
   );
+  static const VerificationMeta _remoteRevisionMeta = const VerificationMeta(
+    'remoteRevision',
+  );
+  @override
+  late final GeneratedColumn<int> remoteRevision = GeneratedColumn<int>(
+    'remote_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(remoteRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -109,6 +122,7 @@ class $BatchesTable extends Batches with TableInfo<$BatchesTable, BatchRow> {
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -177,6 +191,15 @@ class $BatchesTable extends Batches with TableInfo<$BatchesTable, BatchRow> {
         syncState.isAcceptableOrUnknown(data['sync_state']!, _syncStateMeta),
       );
     }
+    if (data.containsKey('remote_revision')) {
+      context.handle(
+        _remoteRevisionMeta,
+        remoteRevision.isAcceptableOrUnknown(
+          data['remote_revision']!,
+          _remoteRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -218,6 +241,10 @@ class $BatchesTable extends Batches with TableInfo<$BatchesTable, BatchRow> {
         DriftSqlType.string,
         data['${effectivePrefix}sync_state'],
       )!,
+      remoteRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remote_revision'],
+      )!,
     );
   }
 
@@ -236,6 +263,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String syncState;
+  final int remoteRevision;
   const BatchRow({
     required this.id,
     this.ownerId,
@@ -245,6 +273,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
     required this.updatedAt,
     this.deletedAt,
     required this.syncState,
+    required this.remoteRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -261,6 +290,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['sync_state'] = Variable<String>(syncState);
+    map['remote_revision'] = Variable<int>(remoteRevision);
     return map;
   }
 
@@ -278,6 +308,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
           ? const Value.absent()
           : Value(deletedAt),
       syncState: Value(syncState),
+      remoteRevision: Value(remoteRevision),
     );
   }
 
@@ -295,6 +326,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       syncState: serializer.fromJson<String>(json['syncState']),
+      remoteRevision: serializer.fromJson<int>(json['remoteRevision']),
     );
   }
   @override
@@ -309,6 +341,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'syncState': serializer.toJson<String>(syncState),
+      'remoteRevision': serializer.toJson<int>(remoteRevision),
     };
   }
 
@@ -321,6 +354,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
     String? syncState,
+    int? remoteRevision,
   }) => BatchRow(
     id: id ?? this.id,
     ownerId: ownerId.present ? ownerId.value : this.ownerId,
@@ -330,6 +364,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     syncState: syncState ?? this.syncState,
+    remoteRevision: remoteRevision ?? this.remoteRevision,
   );
   BatchRow copyWithCompanion(BatchesCompanion data) {
     return BatchRow(
@@ -341,6 +376,9 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       syncState: data.syncState.present ? data.syncState.value : this.syncState,
+      remoteRevision: data.remoteRevision.present
+          ? data.remoteRevision.value
+          : this.remoteRevision,
     );
   }
 
@@ -354,7 +392,8 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('syncState: $syncState')
+          ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision')
           ..write(')'))
         .toString();
   }
@@ -369,6 +408,7 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -381,7 +421,8 @@ class BatchRow extends DataClass implements Insertable<BatchRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
-          other.syncState == this.syncState);
+          other.syncState == this.syncState &&
+          other.remoteRevision == this.remoteRevision);
 }
 
 class BatchesCompanion extends UpdateCompanion<BatchRow> {
@@ -393,6 +434,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<String> syncState;
+  final Value<int> remoteRevision;
   final Value<int> rowid;
   const BatchesCompanion({
     this.id = const Value.absent(),
@@ -403,6 +445,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BatchesCompanion.insert({
@@ -414,6 +457,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -429,6 +473,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? syncState,
+    Expression<int>? remoteRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -440,6 +485,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (syncState != null) 'sync_state': syncState,
+      if (remoteRevision != null) 'remote_revision': remoteRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -453,6 +499,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<String>? syncState,
+    Value<int>? remoteRevision,
     Value<int>? rowid,
   }) {
     return BatchesCompanion(
@@ -464,6 +511,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       syncState: syncState ?? this.syncState,
+      remoteRevision: remoteRevision ?? this.remoteRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -495,6 +543,9 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
     if (syncState.present) {
       map['sync_state'] = Variable<String>(syncState.value);
     }
+    if (remoteRevision.present) {
+      map['remote_revision'] = Variable<int>(remoteRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -512,6 +563,7 @@ class BatchesCompanion extends UpdateCompanion<BatchRow> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -772,6 +824,32 @@ class $ScanRecordsTable extends ScanRecords
     requiredDuringInsert: false,
     defaultValue: const Constant('local_only'),
   );
+  static const VerificationMeta _remoteRevisionMeta = const VerificationMeta(
+    'remoteRevision',
+  );
+  @override
+  late final GeneratedColumn<int> remoteRevision = GeneratedColumn<int>(
+    'remote_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(remoteRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _imageSyncStateMeta = const VerificationMeta(
+    'imageSyncState',
+  );
+  @override
+  late final GeneratedColumn<String> imageSyncState = GeneratedColumn<String>(
+    'image_sync_state',
+    aliasedName,
+    false,
+    check: () => imageSyncState.isIn(PersistenceCodecs.imageSyncStateCodes),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('local_only'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -795,6 +873,8 @@ class $ScanRecordsTable extends ScanRecords
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
+    imageSyncState,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -988,6 +1068,24 @@ class $ScanRecordsTable extends ScanRecords
         syncState.isAcceptableOrUnknown(data['sync_state']!, _syncStateMeta),
       );
     }
+    if (data.containsKey('remote_revision')) {
+      context.handle(
+        _remoteRevisionMeta,
+        remoteRevision.isAcceptableOrUnknown(
+          data['remote_revision']!,
+          _remoteRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('image_sync_state')) {
+      context.handle(
+        _imageSyncStateMeta,
+        imageSyncState.isAcceptableOrUnknown(
+          data['image_sync_state']!,
+          _imageSyncStateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1081,6 +1179,14 @@ class $ScanRecordsTable extends ScanRecords
         DriftSqlType.string,
         data['${effectivePrefix}sync_state'],
       )!,
+      remoteRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remote_revision'],
+      )!,
+      imageSyncState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_sync_state'],
+      )!,
     );
   }
 
@@ -1112,6 +1218,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String syncState;
+  final int remoteRevision;
+  final String imageSyncState;
   const ScanRecordRow({
     required this.id,
     this.ownerId,
@@ -1134,6 +1242,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     required this.updatedAt,
     this.deletedAt,
     required this.syncState,
+    required this.remoteRevision,
+    required this.imageSyncState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1183,6 +1293,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['sync_state'] = Variable<String>(syncState);
+    map['remote_revision'] = Variable<int>(remoteRevision);
+    map['image_sync_state'] = Variable<String>(imageSyncState);
     return map;
   }
 
@@ -1229,6 +1341,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           ? const Value.absent()
           : Value(deletedAt),
       syncState: Value(syncState),
+      remoteRevision: Value(remoteRevision),
+      imageSyncState: Value(imageSyncState),
     );
   }
 
@@ -1265,6 +1379,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       syncState: serializer.fromJson<String>(json['syncState']),
+      remoteRevision: serializer.fromJson<int>(json['remoteRevision']),
+      imageSyncState: serializer.fromJson<String>(json['imageSyncState']),
     );
   }
   @override
@@ -1296,6 +1412,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'syncState': serializer.toJson<String>(syncState),
+      'remoteRevision': serializer.toJson<int>(remoteRevision),
+      'imageSyncState': serializer.toJson<String>(imageSyncState),
     };
   }
 
@@ -1321,6 +1439,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
     String? syncState,
+    int? remoteRevision,
+    String? imageSyncState,
   }) => ScanRecordRow(
     id: id ?? this.id,
     ownerId: ownerId.present ? ownerId.value : this.ownerId,
@@ -1358,6 +1478,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     syncState: syncState ?? this.syncState,
+    remoteRevision: remoteRevision ?? this.remoteRevision,
+    imageSyncState: imageSyncState ?? this.imageSyncState,
   );
   ScanRecordRow copyWithCompanion(ScanRecordsCompanion data) {
     return ScanRecordRow(
@@ -1408,6 +1530,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       syncState: data.syncState.present ? data.syncState.value : this.syncState,
+      remoteRevision: data.remoteRevision.present
+          ? data.remoteRevision.value
+          : this.remoteRevision,
+      imageSyncState: data.imageSyncState.present
+          ? data.imageSyncState.value
+          : this.imageSyncState,
     );
   }
 
@@ -1434,7 +1562,9 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('syncState: $syncState')
+          ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision, ')
+          ..write('imageSyncState: $imageSyncState')
           ..write(')'))
         .toString();
   }
@@ -1462,6 +1592,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
+    imageSyncState,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1487,7 +1619,9 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
-          other.syncState == this.syncState);
+          other.syncState == this.syncState &&
+          other.remoteRevision == this.remoteRevision &&
+          other.imageSyncState == this.imageSyncState);
 }
 
 class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
@@ -1512,6 +1646,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<String> syncState;
+  final Value<int> remoteRevision;
+  final Value<String> imageSyncState;
   final Value<int> rowid;
   const ScanRecordsCompanion({
     this.id = const Value.absent(),
@@ -1535,6 +1671,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
+    this.imageSyncState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ScanRecordsCompanion.insert({
@@ -1559,6 +1697,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
+    this.imageSyncState = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        fruitType = Value(fruitType),
@@ -1591,6 +1731,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? syncState,
+    Expression<int>? remoteRevision,
+    Expression<String>? imageSyncState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1617,6 +1759,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (syncState != null) 'sync_state': syncState,
+      if (remoteRevision != null) 'remote_revision': remoteRevision,
+      if (imageSyncState != null) 'image_sync_state': imageSyncState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1643,6 +1787,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<String>? syncState,
+    Value<int>? remoteRevision,
+    Value<String>? imageSyncState,
     Value<int>? rowid,
   }) {
     return ScanRecordsCompanion(
@@ -1669,6 +1815,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       syncState: syncState ?? this.syncState,
+      remoteRevision: remoteRevision ?? this.remoteRevision,
+      imageSyncState: imageSyncState ?? this.imageSyncState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1743,6 +1891,12 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     if (syncState.present) {
       map['sync_state'] = Variable<String>(syncState.value);
     }
+    if (remoteRevision.present) {
+      map['remote_revision'] = Variable<int>(remoteRevision.value);
+    }
+    if (imageSyncState.present) {
+      map['image_sync_state'] = Variable<String>(imageSyncState.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1773,6 +1927,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision, ')
+          ..write('imageSyncState: $imageSyncState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1915,6 +2071,19 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant('local_only'),
   );
+  static const VerificationMeta _remoteRevisionMeta = const VerificationMeta(
+    'remoteRevision',
+  );
+  @override
+  late final GeneratedColumn<int> remoteRevision = GeneratedColumn<int>(
+    'remote_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(remoteRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1928,6 +2097,7 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderRow> {
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2029,6 +2199,15 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderRow> {
         syncState.isAcceptableOrUnknown(data['sync_state']!, _syncStateMeta),
       );
     }
+    if (data.containsKey('remote_revision')) {
+      context.handle(
+        _remoteRevisionMeta,
+        remoteRevision.isAcceptableOrUnknown(
+          data['remote_revision']!,
+          _remoteRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2082,6 +2261,10 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderRow> {
         DriftSqlType.string,
         data['${effectivePrefix}sync_state'],
       )!,
+      remoteRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remote_revision'],
+      )!,
     );
   }
 
@@ -2103,6 +2286,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String syncState;
+  final int remoteRevision;
   const OrderRow({
     required this.id,
     this.ownerId,
@@ -2115,6 +2299,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
     required this.updatedAt,
     this.deletedAt,
     required this.syncState,
+    required this.remoteRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2134,6 +2319,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['sync_state'] = Variable<String>(syncState);
+    map['remote_revision'] = Variable<int>(remoteRevision);
     return map;
   }
 
@@ -2154,6 +2340,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
           ? const Value.absent()
           : Value(deletedAt),
       syncState: Value(syncState),
+      remoteRevision: Value(remoteRevision),
     );
   }
 
@@ -2174,6 +2361,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       syncState: serializer.fromJson<String>(json['syncState']),
+      remoteRevision: serializer.fromJson<int>(json['remoteRevision']),
     );
   }
   @override
@@ -2191,6 +2379,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'syncState': serializer.toJson<String>(syncState),
+      'remoteRevision': serializer.toJson<int>(remoteRevision),
     };
   }
 
@@ -2206,6 +2395,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
     String? syncState,
+    int? remoteRevision,
   }) => OrderRow(
     id: id ?? this.id,
     ownerId: ownerId.present ? ownerId.value : this.ownerId,
@@ -2218,6 +2408,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     syncState: syncState ?? this.syncState,
+    remoteRevision: remoteRevision ?? this.remoteRevision,
   );
   OrderRow copyWithCompanion(OrdersCompanion data) {
     return OrderRow(
@@ -2238,6 +2429,9 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       syncState: data.syncState.present ? data.syncState.value : this.syncState,
+      remoteRevision: data.remoteRevision.present
+          ? data.remoteRevision.value
+          : this.remoteRevision,
     );
   }
 
@@ -2254,7 +2448,8 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('syncState: $syncState')
+          ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision')
           ..write(')'))
         .toString();
   }
@@ -2272,6 +2467,7 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
     updatedAt,
     deletedAt,
     syncState,
+    remoteRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -2287,7 +2483,8 @@ class OrderRow extends DataClass implements Insertable<OrderRow> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
-          other.syncState == this.syncState);
+          other.syncState == this.syncState &&
+          other.remoteRevision == this.remoteRevision);
 }
 
 class OrdersCompanion extends UpdateCompanion<OrderRow> {
@@ -2302,6 +2499,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<String> syncState;
+  final Value<int> remoteRevision;
   final Value<int> rowid;
   const OrdersCompanion({
     this.id = const Value.absent(),
@@ -2315,6 +2513,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OrdersCompanion.insert({
@@ -2329,6 +2528,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
     this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        batchId = Value(batchId),
@@ -2350,6 +2550,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? syncState,
+    Expression<int>? remoteRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2364,6 +2565,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (syncState != null) 'sync_state': syncState,
+      if (remoteRevision != null) 'remote_revision': remoteRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2380,6 +2582,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<String>? syncState,
+    Value<int>? remoteRevision,
     Value<int>? rowid,
   }) {
     return OrdersCompanion(
@@ -2394,6 +2597,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       syncState: syncState ?? this.syncState,
+      remoteRevision: remoteRevision ?? this.remoteRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2434,6 +2638,9 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
     if (syncState.present) {
       map['sync_state'] = Variable<String>(syncState.value);
     }
+    if (remoteRevision.present) {
+      map['remote_revision'] = Variable<int>(remoteRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2454,6 +2661,7 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2511,12 +2719,78 @@ class $AppSettingsTable extends AppSettings
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _lastSyncAttemptAtMeta = const VerificationMeta(
+    'lastSyncAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_sync_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _syncCursorAtMeta = const VerificationMeta(
+    'syncCursorAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> syncCursorAt = GeneratedColumn<DateTime>(
+    'sync_cursor_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncErrorCodeMeta = const VerificationMeta(
+    'lastSyncErrorCode',
+  );
+  @override
+  late final GeneratedColumn<String> lastSyncErrorCode =
+      GeneratedColumn<String>(
+        'last_sync_error_code',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _syncStateMeta = const VerificationMeta(
+    'syncState',
+  );
+  @override
+  late final GeneratedColumn<String> syncState = GeneratedColumn<String>(
+    'sync_state',
+    aliasedName,
+    false,
+    check: () => syncState.isIn(PersistenceCodecs.syncStateCodes),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('local_only'),
+  );
+  static const VerificationMeta _remoteRevisionMeta = const VerificationMeta(
+    'remoteRevision',
+  );
+  @override
+  late final GeneratedColumn<int> remoteRevision = GeneratedColumn<int>(
+    'remote_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(remoteRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     imageUploadConsent,
     consentVersion,
     lastSuccessfulSyncAt,
+    lastSyncAttemptAt,
+    syncCursorAt,
+    lastSyncErrorCode,
+    syncState,
+    remoteRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2560,6 +2834,48 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('last_sync_attempt_at')) {
+      context.handle(
+        _lastSyncAttemptAtMeta,
+        lastSyncAttemptAt.isAcceptableOrUnknown(
+          data['last_sync_attempt_at']!,
+          _lastSyncAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_cursor_at')) {
+      context.handle(
+        _syncCursorAtMeta,
+        syncCursorAt.isAcceptableOrUnknown(
+          data['sync_cursor_at']!,
+          _syncCursorAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_error_code')) {
+      context.handle(
+        _lastSyncErrorCodeMeta,
+        lastSyncErrorCode.isAcceptableOrUnknown(
+          data['last_sync_error_code']!,
+          _lastSyncErrorCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_state')) {
+      context.handle(
+        _syncStateMeta,
+        syncState.isAcceptableOrUnknown(data['sync_state']!, _syncStateMeta),
+      );
+    }
+    if (data.containsKey('remote_revision')) {
+      context.handle(
+        _remoteRevisionMeta,
+        remoteRevision.isAcceptableOrUnknown(
+          data['remote_revision']!,
+          _remoteRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2585,6 +2901,26 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_successful_sync_at'],
       ),
+      lastSyncAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_sync_attempt_at'],
+      ),
+      syncCursorAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}sync_cursor_at'],
+      ),
+      lastSyncErrorCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_sync_error_code'],
+      ),
+      syncState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_state'],
+      )!,
+      remoteRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remote_revision'],
+      )!,
     );
   }
 
@@ -2599,11 +2935,21 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final bool? imageUploadConsent;
   final String? consentVersion;
   final DateTime? lastSuccessfulSyncAt;
+  final DateTime? lastSyncAttemptAt;
+  final DateTime? syncCursorAt;
+  final String? lastSyncErrorCode;
+  final String syncState;
+  final int remoteRevision;
   const AppSettingsRow({
     required this.id,
     this.imageUploadConsent,
     this.consentVersion,
     this.lastSuccessfulSyncAt,
+    this.lastSyncAttemptAt,
+    this.syncCursorAt,
+    this.lastSyncErrorCode,
+    required this.syncState,
+    required this.remoteRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2618,6 +2964,17 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     if (!nullToAbsent || lastSuccessfulSyncAt != null) {
       map['last_successful_sync_at'] = Variable<DateTime>(lastSuccessfulSyncAt);
     }
+    if (!nullToAbsent || lastSyncAttemptAt != null) {
+      map['last_sync_attempt_at'] = Variable<DateTime>(lastSyncAttemptAt);
+    }
+    if (!nullToAbsent || syncCursorAt != null) {
+      map['sync_cursor_at'] = Variable<DateTime>(syncCursorAt);
+    }
+    if (!nullToAbsent || lastSyncErrorCode != null) {
+      map['last_sync_error_code'] = Variable<String>(lastSyncErrorCode);
+    }
+    map['sync_state'] = Variable<String>(syncState);
+    map['remote_revision'] = Variable<int>(remoteRevision);
     return map;
   }
 
@@ -2633,6 +2990,17 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       lastSuccessfulSyncAt: lastSuccessfulSyncAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSuccessfulSyncAt),
+      lastSyncAttemptAt: lastSyncAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAttemptAt),
+      syncCursorAt: syncCursorAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncCursorAt),
+      lastSyncErrorCode: lastSyncErrorCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncErrorCode),
+      syncState: Value(syncState),
+      remoteRevision: Value(remoteRevision),
     );
   }
 
@@ -2650,6 +3018,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       lastSuccessfulSyncAt: serializer.fromJson<DateTime?>(
         json['lastSuccessfulSyncAt'],
       ),
+      lastSyncAttemptAt: serializer.fromJson<DateTime?>(
+        json['lastSyncAttemptAt'],
+      ),
+      syncCursorAt: serializer.fromJson<DateTime?>(json['syncCursorAt']),
+      lastSyncErrorCode: serializer.fromJson<String?>(
+        json['lastSyncErrorCode'],
+      ),
+      syncState: serializer.fromJson<String>(json['syncState']),
+      remoteRevision: serializer.fromJson<int>(json['remoteRevision']),
     );
   }
   @override
@@ -2662,6 +3039,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       'lastSuccessfulSyncAt': serializer.toJson<DateTime?>(
         lastSuccessfulSyncAt,
       ),
+      'lastSyncAttemptAt': serializer.toJson<DateTime?>(lastSyncAttemptAt),
+      'syncCursorAt': serializer.toJson<DateTime?>(syncCursorAt),
+      'lastSyncErrorCode': serializer.toJson<String?>(lastSyncErrorCode),
+      'syncState': serializer.toJson<String>(syncState),
+      'remoteRevision': serializer.toJson<int>(remoteRevision),
     };
   }
 
@@ -2670,6 +3052,11 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<bool?> imageUploadConsent = const Value.absent(),
     Value<String?> consentVersion = const Value.absent(),
     Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
+    Value<DateTime?> lastSyncAttemptAt = const Value.absent(),
+    Value<DateTime?> syncCursorAt = const Value.absent(),
+    Value<String?> lastSyncErrorCode = const Value.absent(),
+    String? syncState,
+    int? remoteRevision,
   }) => AppSettingsRow(
     id: id ?? this.id,
     imageUploadConsent: imageUploadConsent.present
@@ -2681,6 +3068,15 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     lastSuccessfulSyncAt: lastSuccessfulSyncAt.present
         ? lastSuccessfulSyncAt.value
         : this.lastSuccessfulSyncAt,
+    lastSyncAttemptAt: lastSyncAttemptAt.present
+        ? lastSyncAttemptAt.value
+        : this.lastSyncAttemptAt,
+    syncCursorAt: syncCursorAt.present ? syncCursorAt.value : this.syncCursorAt,
+    lastSyncErrorCode: lastSyncErrorCode.present
+        ? lastSyncErrorCode.value
+        : this.lastSyncErrorCode,
+    syncState: syncState ?? this.syncState,
+    remoteRevision: remoteRevision ?? this.remoteRevision,
   );
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
@@ -2694,6 +3090,19 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       lastSuccessfulSyncAt: data.lastSuccessfulSyncAt.present
           ? data.lastSuccessfulSyncAt.value
           : this.lastSuccessfulSyncAt,
+      lastSyncAttemptAt: data.lastSyncAttemptAt.present
+          ? data.lastSyncAttemptAt.value
+          : this.lastSyncAttemptAt,
+      syncCursorAt: data.syncCursorAt.present
+          ? data.syncCursorAt.value
+          : this.syncCursorAt,
+      lastSyncErrorCode: data.lastSyncErrorCode.present
+          ? data.lastSyncErrorCode.value
+          : this.lastSyncErrorCode,
+      syncState: data.syncState.present ? data.syncState.value : this.syncState,
+      remoteRevision: data.remoteRevision.present
+          ? data.remoteRevision.value
+          : this.remoteRevision,
     );
   }
 
@@ -2703,14 +3112,28 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           ..write('id: $id, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
-          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
+          ..write('lastSyncAttemptAt: $lastSyncAttemptAt, ')
+          ..write('syncCursorAt: $syncCursorAt, ')
+          ..write('lastSyncErrorCode: $lastSyncErrorCode, ')
+          ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, imageUploadConsent, consentVersion, lastSuccessfulSyncAt);
+  int get hashCode => Object.hash(
+    id,
+    imageUploadConsent,
+    consentVersion,
+    lastSuccessfulSyncAt,
+    lastSyncAttemptAt,
+    syncCursorAt,
+    lastSyncErrorCode,
+    syncState,
+    remoteRevision,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2718,7 +3141,12 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.id == this.id &&
           other.imageUploadConsent == this.imageUploadConsent &&
           other.consentVersion == this.consentVersion &&
-          other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt);
+          other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt &&
+          other.lastSyncAttemptAt == this.lastSyncAttemptAt &&
+          other.syncCursorAt == this.syncCursorAt &&
+          other.lastSyncErrorCode == this.lastSyncErrorCode &&
+          other.syncState == this.syncState &&
+          other.remoteRevision == this.remoteRevision);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
@@ -2726,23 +3154,43 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<bool?> imageUploadConsent;
   final Value<String?> consentVersion;
   final Value<DateTime?> lastSuccessfulSyncAt;
+  final Value<DateTime?> lastSyncAttemptAt;
+  final Value<DateTime?> syncCursorAt;
+  final Value<String?> lastSyncErrorCode;
+  final Value<String> syncState;
+  final Value<int> remoteRevision;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
+    this.lastSyncAttemptAt = const Value.absent(),
+    this.syncCursorAt = const Value.absent(),
+    this.lastSyncErrorCode = const Value.absent(),
+    this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
+    this.lastSyncAttemptAt = const Value.absent(),
+    this.syncCursorAt = const Value.absent(),
+    this.lastSyncErrorCode = const Value.absent(),
+    this.syncState = const Value.absent(),
+    this.remoteRevision = const Value.absent(),
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
     Expression<bool>? imageUploadConsent,
     Expression<String>? consentVersion,
     Expression<DateTime>? lastSuccessfulSyncAt,
+    Expression<DateTime>? lastSyncAttemptAt,
+    Expression<DateTime>? syncCursorAt,
+    Expression<String>? lastSyncErrorCode,
+    Expression<String>? syncState,
+    Expression<int>? remoteRevision,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2751,6 +3199,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (consentVersion != null) 'consent_version': consentVersion,
       if (lastSuccessfulSyncAt != null)
         'last_successful_sync_at': lastSuccessfulSyncAt,
+      if (lastSyncAttemptAt != null) 'last_sync_attempt_at': lastSyncAttemptAt,
+      if (syncCursorAt != null) 'sync_cursor_at': syncCursorAt,
+      if (lastSyncErrorCode != null) 'last_sync_error_code': lastSyncErrorCode,
+      if (syncState != null) 'sync_state': syncState,
+      if (remoteRevision != null) 'remote_revision': remoteRevision,
     });
   }
 
@@ -2759,12 +3212,22 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<bool?>? imageUploadConsent,
     Value<String?>? consentVersion,
     Value<DateTime?>? lastSuccessfulSyncAt,
+    Value<DateTime?>? lastSyncAttemptAt,
+    Value<DateTime?>? syncCursorAt,
+    Value<String?>? lastSyncErrorCode,
+    Value<String>? syncState,
+    Value<int>? remoteRevision,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
       imageUploadConsent: imageUploadConsent ?? this.imageUploadConsent,
       consentVersion: consentVersion ?? this.consentVersion,
       lastSuccessfulSyncAt: lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
+      lastSyncAttemptAt: lastSyncAttemptAt ?? this.lastSyncAttemptAt,
+      syncCursorAt: syncCursorAt ?? this.syncCursorAt,
+      lastSyncErrorCode: lastSyncErrorCode ?? this.lastSyncErrorCode,
+      syncState: syncState ?? this.syncState,
+      remoteRevision: remoteRevision ?? this.remoteRevision,
     );
   }
 
@@ -2785,6 +3248,21 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
         lastSuccessfulSyncAt.value,
       );
     }
+    if (lastSyncAttemptAt.present) {
+      map['last_sync_attempt_at'] = Variable<DateTime>(lastSyncAttemptAt.value);
+    }
+    if (syncCursorAt.present) {
+      map['sync_cursor_at'] = Variable<DateTime>(syncCursorAt.value);
+    }
+    if (lastSyncErrorCode.present) {
+      map['last_sync_error_code'] = Variable<String>(lastSyncErrorCode.value);
+    }
+    if (syncState.present) {
+      map['sync_state'] = Variable<String>(syncState.value);
+    }
+    if (remoteRevision.present) {
+      map['remote_revision'] = Variable<int>(remoteRevision.value);
+    }
     return map;
   }
 
@@ -2794,7 +3272,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('id: $id, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
-          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
+          ..write('lastSyncAttemptAt: $lastSyncAttemptAt, ')
+          ..write('syncCursorAt: $syncCursorAt, ')
+          ..write('lastSyncErrorCode: $lastSyncErrorCode, ')
+          ..write('syncState: $syncState, ')
+          ..write('remoteRevision: $remoteRevision')
           ..write(')'))
         .toString();
   }
@@ -2884,6 +3367,7 @@ typedef $$BatchesTableCreateCompanionBuilder =
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
       Value<int> rowid,
     });
 typedef $$BatchesTableUpdateCompanionBuilder =
@@ -2896,6 +3380,7 @@ typedef $$BatchesTableUpdateCompanionBuilder =
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
       Value<int> rowid,
     });
 
@@ -2987,6 +3472,11 @@ class $$BatchesTableFilterComposer
 
   ColumnFilters<String> get syncState => $composableBuilder(
     column: $table.syncState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3089,6 +3579,11 @@ class $$BatchesTableOrderingComposer
     column: $table.syncState,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$BatchesTableAnnotationComposer
@@ -3123,6 +3618,11 @@ class $$BatchesTableAnnotationComposer
 
   GeneratedColumn<String> get syncState =>
       $composableBuilder(column: $table.syncState, builder: (column) => column);
+
+  GeneratedColumn<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => column,
+  );
 
   Expression<T> scanRecordsRefs<T extends Object>(
     Expression<T> Function($$ScanRecordsTableAnnotationComposer a) f,
@@ -3211,6 +3711,7 @@ class $$BatchesTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BatchesCompanion(
                 id: id,
@@ -3221,6 +3722,7 @@ class $$BatchesTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3233,6 +3735,7 @@ class $$BatchesTableTableManager
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BatchesCompanion.insert(
                 id: id,
@@ -3243,6 +3746,7 @@ class $$BatchesTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3351,6 +3855,8 @@ typedef $$ScanRecordsTableCreateCompanionBuilder =
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
+      Value<String> imageSyncState,
       Value<int> rowid,
     });
 typedef $$ScanRecordsTableUpdateCompanionBuilder =
@@ -3376,6 +3882,8 @@ typedef $$ScanRecordsTableUpdateCompanionBuilder =
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
+      Value<String> imageSyncState,
       Value<int> rowid,
     });
 
@@ -3507,6 +4015,16 @@ class $$ScanRecordsTableFilterComposer
 
   ColumnFilters<String> get syncState => $composableBuilder(
     column: $table.syncState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageSyncState => $composableBuilder(
+    column: $table.imageSyncState,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3643,6 +4161,16 @@ class $$ScanRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageSyncState => $composableBuilder(
+    column: $table.imageSyncState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BatchesTableOrderingComposer get batchId {
     final $$BatchesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3762,6 +4290,16 @@ class $$ScanRecordsTableAnnotationComposer
   GeneratedColumn<String> get syncState =>
       $composableBuilder(column: $table.syncState, builder: (column) => column);
 
+  GeneratedColumn<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get imageSyncState => $composableBuilder(
+    column: $table.imageSyncState,
+    builder: (column) => column,
+  );
+
   $$BatchesTableAnnotationComposer get batchId {
     final $$BatchesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -3835,6 +4373,8 @@ class $$ScanRecordsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
+                Value<String> imageSyncState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ScanRecordsCompanion(
                 id: id,
@@ -3858,6 +4398,8 @@ class $$ScanRecordsTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
+                imageSyncState: imageSyncState,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3883,6 +4425,8 @@ class $$ScanRecordsTableTableManager
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
+                Value<String> imageSyncState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ScanRecordsCompanion.insert(
                 id: id,
@@ -3906,6 +4450,8 @@ class $$ScanRecordsTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
+                imageSyncState: imageSyncState,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3988,6 +4534,7 @@ typedef $$OrdersTableCreateCompanionBuilder =
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
       Value<int> rowid,
     });
 typedef $$OrdersTableUpdateCompanionBuilder =
@@ -4003,6 +4550,7 @@ typedef $$OrdersTableUpdateCompanionBuilder =
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> syncState,
+      Value<int> remoteRevision,
       Value<int> rowid,
     });
 
@@ -4084,6 +4632,11 @@ class $$OrdersTableFilterComposer
 
   ColumnFilters<String> get syncState => $composableBuilder(
     column: $table.syncState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4170,6 +4723,11 @@ class $$OrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BatchesTableOrderingComposer get batchId {
     final $$BatchesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -4239,6 +4797,11 @@ class $$OrdersTableAnnotationComposer
   GeneratedColumn<String> get syncState =>
       $composableBuilder(column: $table.syncState, builder: (column) => column);
 
+  GeneratedColumn<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => column,
+  );
+
   $$BatchesTableAnnotationComposer get batchId {
     final $$BatchesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -4302,6 +4865,7 @@ class $$OrdersTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrdersCompanion(
                 id: id,
@@ -4315,6 +4879,7 @@ class $$OrdersTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4330,6 +4895,7 @@ class $$OrdersTableTableManager
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrdersCompanion.insert(
                 id: id,
@@ -4343,6 +4909,7 @@ class $$OrdersTableTableManager
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 syncState: syncState,
+                remoteRevision: remoteRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4416,6 +4983,11 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
+      Value<DateTime?> lastSyncAttemptAt,
+      Value<DateTime?> syncCursorAt,
+      Value<String?> lastSyncErrorCode,
+      Value<String> syncState,
+      Value<int> remoteRevision,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -4423,6 +4995,11 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
+      Value<DateTime?> lastSyncAttemptAt,
+      Value<DateTime?> syncCursorAt,
+      Value<String?> lastSyncErrorCode,
+      Value<String> syncState,
+      Value<int> remoteRevision,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -4451,6 +5028,31 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
     column: $table.lastSuccessfulSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncAttemptAt => $composableBuilder(
+    column: $table.lastSyncAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get syncCursorAt => $composableBuilder(
+    column: $table.syncCursorAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSyncErrorCode => $composableBuilder(
+    column: $table.lastSyncErrorCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncState => $composableBuilder(
+    column: $table.syncState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4483,6 +5085,31 @@ class $$AppSettingsTableOrderingComposer
     column: $table.lastSuccessfulSyncAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get lastSyncAttemptAt => $composableBuilder(
+    column: $table.lastSyncAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get syncCursorAt => $composableBuilder(
+    column: $table.syncCursorAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSyncErrorCode => $composableBuilder(
+    column: $table.lastSyncErrorCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncState => $composableBuilder(
+    column: $table.syncState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -4509,6 +5136,29 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
     column: $table.lastSuccessfulSyncAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSyncAttemptAt => $composableBuilder(
+    column: $table.lastSyncAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get syncCursorAt => $composableBuilder(
+    column: $table.syncCursorAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSyncErrorCode => $composableBuilder(
+    column: $table.lastSyncErrorCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncState =>
+      $composableBuilder(column: $table.syncState, builder: (column) => column);
+
+  GeneratedColumn<int> get remoteRevision => $composableBuilder(
+    column: $table.remoteRevision,
     builder: (column) => column,
   );
 }
@@ -4548,11 +5198,21 @@ class $$AppSettingsTableTableManager
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
+                Value<DateTime?> lastSyncAttemptAt = const Value.absent(),
+                Value<DateTime?> syncCursorAt = const Value.absent(),
+                Value<String?> lastSyncErrorCode = const Value.absent(),
+                Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                lastSyncAttemptAt: lastSyncAttemptAt,
+                syncCursorAt: syncCursorAt,
+                lastSyncErrorCode: lastSyncErrorCode,
+                syncState: syncState,
+                remoteRevision: remoteRevision,
               ),
           createCompanionCallback:
               ({
@@ -4560,11 +5220,21 @@ class $$AppSettingsTableTableManager
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
+                Value<DateTime?> lastSyncAttemptAt = const Value.absent(),
+                Value<DateTime?> syncCursorAt = const Value.absent(),
+                Value<String?> lastSyncErrorCode = const Value.absent(),
+                Value<String> syncState = const Value.absent(),
+                Value<int> remoteRevision = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                lastSyncAttemptAt: lastSyncAttemptAt,
+                syncCursorAt: syncCursorAt,
+                lastSyncErrorCode: lastSyncErrorCode,
+                syncState: syncState,
+                remoteRevision: remoteRevision,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

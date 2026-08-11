@@ -59,6 +59,14 @@ app.*.map.json
 /config/*.json
 !/config/example.json
 
+# Project-local Supabase/Node tooling
+/node_modules/
+/supabase/.branches/
+/supabase/.temp/
+/supabase/.env
+/supabase/.env.*
+!/supabase/.env.example
+
 # Local test media is not part of the team repository
 /assets/test_images/
 

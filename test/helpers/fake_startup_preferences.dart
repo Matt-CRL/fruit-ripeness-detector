@@ -13,6 +13,7 @@ final class FakeStartupPreferences implements StartupPreferences {
   bool onboardingCompleted;
   bool failWrites;
   AppearanceMode appearanceMode;
+  final Set<String> completedAccountOnboarding = <String>{};
 
   @override
   Future<StartupDestination> readDestination() async {
@@ -40,6 +41,19 @@ final class FakeStartupPreferences implements StartupPreferences {
     }
     guestSelected = true;
     onboardingCompleted = true;
+  }
+
+  @override
+  Future<bool> isAccountOnboardingCompleted(String userId) async {
+    return completedAccountOnboarding.contains(userId);
+  }
+
+  @override
+  Future<void> completeAccountOnboarding(String userId) async {
+    if (failWrites) {
+      throw StateError('Preference write failed.');
+    }
+    completedAccountOnboarding.add(userId);
   }
 
   @override

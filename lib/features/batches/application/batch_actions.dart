@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/persistence/entity_id_generator.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/features/auth/application/current_owner_provider.dart';
 import 'package:kami/features/batches/data/drift_batch_repository.dart';
 import 'package:kami/features/batches/domain/batch_repository.dart';
 import 'package:kami/features/batches/domain/fruit_batch.dart';
@@ -22,6 +23,7 @@ final createBatchUseCaseProvider = Provider<CreateBatchUseCase>((ref) {
     ref.watch(batchRepositoryProvider),
     ref.watch(entityIdGeneratorProvider),
     ref.watch(batchUtcNowProvider),
+    ref.watch(currentOwnerIdProvider),
   );
 });
 
@@ -87,11 +89,17 @@ final deleteBatchUseCaseProvider = Provider<DeleteBatchUseCase>((ref) {
 });
 
 final class CreateBatchUseCase {
-  const CreateBatchUseCase(this._repository, this._idGenerator, this._utcNow);
+  const CreateBatchUseCase(
+    this._repository,
+    this._idGenerator,
+    this._utcNow, [
+    this._ownerId,
+  ]);
 
   final BatchRepository _repository;
   final EntityIdGenerator _idGenerator;
   final BatchUtcNow _utcNow;
+  final String? _ownerId;
 
   Future<FruitBatch> execute({
     required String name,
@@ -112,11 +120,14 @@ final class CreateBatchUseCase {
     final now = _utcNow();
     final batch = FruitBatch(
       id: _idGenerator.nextId(),
+      ownerId: _ownerId,
       name: normalizedName,
       fruit: fruit,
       createdAt: now,
       updatedAt: now,
-      syncState: LocalSyncState.localOnly,
+      syncState: _ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending,
     );
 
     final selectedScanIds = <String>{...scanIds, ?scanId};

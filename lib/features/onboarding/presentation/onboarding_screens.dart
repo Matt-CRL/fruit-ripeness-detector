@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -77,6 +78,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       return;
     }
 
+    final currentAccount = ref.read(currentAccountProvider);
+    if (currentAccount != null) {
+      await ref.read(authRepositoryProvider).signOut(localOnly: true);
+    }
     if (mounted) {
       context.go(AppRoutes.accountChoice);
     }
@@ -86,7 +91,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _isCompleting = true);
 
     try {
-      await ref.read(startupPreferencesProvider).completeGuestOnboarding();
+      final currentAccount = ref.read(currentAccountProvider);
+      if (currentAccount == null) {
+        await ref.read(startupPreferencesProvider).completeGuestOnboarding();
+      } else {
+        await ref
+            .read(startupPreferencesProvider)
+            .completeAccountOnboarding(currentAccount.id);
+      }
       if (mounted) {
         context.go(AppRoutes.home);
       }

@@ -102,6 +102,44 @@ final class AppPrivateRetainedScanImageStore implements RetainedScanImageStore {
   }
 
   @override
+  Future<RetainedScanImage> storeDownloadedJpeg({
+    required Uint8List bytes,
+    required String scanId,
+  }) async {
+    PersistenceValidation.entityId(scanId, 'scanId');
+    if (bytes.length < 4 ||
+        bytes.length > 5 * 1024 * 1024 ||
+        bytes[0] != 0xff ||
+        bytes[1] != 0xd8 ||
+        bytes[bytes.length - 2] != 0xff ||
+        bytes[bytes.length - 1] != 0xd9) {
+      throw const RetainedScanImageException(
+        'The downloaded history image is not a valid retained JPEG.',
+      );
+    }
+    final directory = await _historyDirectory();
+    await directory.create(recursive: true);
+    final pending = File(
+      '${directory.path}${Platform.pathSeparator}.$scanId.download.jpg',
+    );
+    final output = File(
+      '${directory.path}${Platform.pathSeparator}$scanId.jpg',
+    );
+    if (await pending.exists()) await pending.delete();
+    try {
+      await pending.writeAsBytes(bytes, flush: true);
+      if (await output.exists()) await output.delete();
+      await pending.rename(output.path);
+      return RetainedScanImage(
+        relativePath: '$_historyDirectoryName/$scanId.jpg',
+      );
+    } on Object {
+      if (await pending.exists()) await pending.delete();
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> remove(String relativePath) async {
     final resolved = File(await resolvePath(relativePath));
     if (await resolved.exists()) {

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
+
+export 'account_form_screens.dart';
 
 class AccountChoiceScreen extends ConsumerStatefulWidget {
   const AccountChoiceScreen({super.key});
@@ -41,6 +44,7 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final accountsAvailable = ref.watch(authRepositoryProvider).isConfigured;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -132,13 +136,15 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Accounts are not available yet.',
+                  Text(
+                    accountsAvailable
+                        ? 'Sign in to synchronize across your devices.'
+                        : 'Online accounts are not configured in this build.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
-                    onPressed: _isStartingGuestMode
+                    onPressed: _isStartingGuestMode || !accountsAvailable
                         ? null
                         : () => context.push(AppRoutes.signIn),
                     icon: const Icon(Icons.login),
@@ -146,92 +152,13 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: _isStartingGuestMode
+                    onPressed: _isStartingGuestMode || !accountsAvailable
                         ? null
                         : () => context.push(AppRoutes.createAccount),
                     icon: const Icon(Icons.person_add_outlined),
                     label: const Text('Create account'),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SignInScreen extends StatelessWidget {
-  const SignInScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _AccountPlaceholder(
-      title: 'Sign in',
-      message: 'Supabase authentication is not part of this foundation.',
-    );
-  }
-}
-
-class CreateAccountScreen extends StatelessWidget {
-  const CreateAccountScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _AccountPlaceholder(
-      title: 'Create account',
-      message:
-          'Account creation will be implemented with consent and migration.',
-    );
-  }
-}
-
-class _AccountPlaceholder extends StatelessWidget {
-  const _AccountPlaceholder({required this.title, required this.message});
-
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Icon(
-                        Icons.cloud_off_outlined,
-                        size: 64,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Not available yet',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(message, textAlign: TextAlign.center),
-                      const SizedBox(height: 28),
-                      FilledButton.icon(
-                        onPressed: () => context.go(AppRoutes.accountChoice),
-                        icon: const Icon(Icons.arrow_back),
-                        label: const Text('Back to account options'),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
           ),

@@ -1,0 +1,15 @@
+{
+  "name": "kami-backend-tooling",
+  "private": true,
+  "scripts": {
+    "supabase": "supabase",
+    "backend:start": "supabase start",
+    "backend:stop": "supabase stop",
+    "backend:reset": "supabase db reset",
+    "backend:test": "supabase test db",
+    "backend:lint": "supabase db lint --local --level warning"
+  },
+  "devDependencies": {
+    "supabase": "2.113.0"
+  }
+}

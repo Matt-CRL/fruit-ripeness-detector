@@ -58,6 +58,7 @@ final class DriftOrderRepository implements OrderRepository {
                       : LocalSyncState.pending,
                 ),
               ),
+              remoteRevision: Value(order.remoteRevision),
             ),
           );
     });
@@ -246,6 +247,7 @@ final class DriftOrderRepository implements OrderRepository {
         updatedAt: updatedAt,
         deletedAt: existing.deletedAt?.toUtc(),
         syncState: syncState,
+        remoteRevision: existing.remoteRevision,
       );
     });
   }
@@ -291,6 +293,7 @@ final class DriftOrderRepository implements OrderRepository {
       updatedAt: row.updatedAt.toUtc(),
       deletedAt: row.deletedAt?.toUtc(),
       syncState: PersistenceCodecs.decodeSyncState(row.syncState),
+      remoteRevision: row.remoteRevision,
     );
   }
 }

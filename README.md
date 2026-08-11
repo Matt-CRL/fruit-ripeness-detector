@@ -16,6 +16,8 @@ part of this repository.
 - Flutter 3.44.7 and Dart 3.12.2
 - Material 3, Riverpod, and go_router
 - Drift with SQLite for offline persistence
+- Supabase Auth, PostgreSQL, and private Storage for optional online accounts
+- encrypted Android session persistence through `flutter_secure_storage`
 - TensorFlow Lite through `tflite_flutter`
 - Flutter CameraX and Android Photo Picker
 - Android minimum API 24; compile and target API 36
@@ -50,8 +52,9 @@ part of this repository.
 - deterministic fake classifier/advisor test boundaries with explicit Demo
   labeling
 - low-confidence, rescan-cancel, and flat repeated-rescan navigation behavior
-- Drift/SQLite schema version four for scans, batches, orders, and app settings,
-  including composite indexes for filtered keyset pages
+- Drift/SQLite schema version five for scans, batches, orders, and app settings,
+  including composite indexes for filtered keyset pages, remote revisions,
+  separate metadata/photo synchronization states, and safe pull cursors
 - repository-level batch/order validation and replaceable providers
 - app-private retained history JPEGs using `flutter_image_compress` and
   `path_provider`
@@ -114,6 +117,22 @@ part of this repository.
   and retained-image storage remains internal to offline History
 - top-level saved-scan detail navigation from batch details, avoiding a second
   main-shell navigator
+- optional email/password account creation, sign-in, recovery, password reset,
+  encrypted session restoration, per-account onboarding, and non-enumerating
+  authentication errors when public Supabase configuration is supplied
+- all-or-nothing authenticated claiming of active guest records, with separate
+  draft cloud-photo consent; canceling the claim returns to unchanged Guest mode
+- foreground-only, durable metadata synchronization with UUID idempotency,
+  revision conflicts, dependency-ordered push, paginated overlapping pull, and
+  startup/resume/local-write/refresh/manual-retry triggers
+- private retained-photo upload and lazy retrieval, deterministic object keys,
+  independent image states, consent revocation, and retryable object deletion
+- authenticated Profile sync status and controls, ZIP/JSON/photo export, safe
+  synchronized sign-out with an explicit destructive-discard alternative, and
+  password-reauthenticated account deletion
+- version-controlled Supabase migrations, pgTAP tests, private Storage/RLS
+  policies, 30-day tombstone cleanup, and an authenticated `delete-account`
+  Edge Function under `supabase/`
 
 ## Bundled model
 
@@ -158,20 +177,22 @@ the application documents directory.
   recommendations against classifier stages
 - Completed-order reopen/audit or delivery business rules; local completed
   batch deletion is supported with an explicit saved-scan warning
-- Supabase client, authentication, guest migration, RLS, Storage, or sync
-- History text search, export, sharing, or cloud image retrieval
+- History text search
+- a hosted development Supabase environment and two-device validation; local
+  database, RLS/Storage policy, and lint checks now pass in Docker, but no
+  hosted development project has been linked or deployed yet
 
-Sign in and Create account remain honest placeholders. Profile keeps the
-Appearance and Guest session controls; it does not expose a user-facing
-storage-management view. Retained History images and the local database remain
-app-private, with cleanup, deletion, reset, export, and cloud-storage controls
-outside the offline MVP.
+Missing cloud configuration intentionally leaves the complete Guest workflow
+available. Account and sync controls appear only for an authenticated account.
+The cloud-photo consent text is a development draft and must be approved by an
+authorized adviser/reviewer before thesis-release validation.
 
 ## Local configuration
 
-Copy `config/example.json` to `config/dev.json` and supply only public client
-configuration when cloud work is approved. Never place service-role keys,
-database passwords, signing material, or other secrets in a Dart define file.
+Copy `config/example.json` to the ignored `config/dev.json` and supply only the
+Supabase project URL and publishable key. Never place service-role keys,
+database passwords, signing material, access tokens, or other secrets in a
+Dart define file or Git.
 
 Run with configuration:
 
@@ -180,7 +201,8 @@ flutter run --dart-define-from-file=config/dev.json
 ```
 
 Missing configuration is valid and keeps the app in local-only guest mode.
-Configuration values are not consumed by a Supabase client yet.
+Valid configuration initializes the optional Supabase client and stores its
+session through encrypted Android storage.
 
 ## Development
 
@@ -190,6 +212,16 @@ Install dependencies:
 
 ```powershell
 flutter pub get
+npm install
+```
+
+The exact project-local Supabase CLI is invoked through `npx`. Docker Desktop
+must be running before starting or resetting the local Supabase stack:
+
+```powershell
+npx supabase start
+npx supabase db reset
+npx supabase test db
 ```
 
 Run formatting, analysis, and tests:

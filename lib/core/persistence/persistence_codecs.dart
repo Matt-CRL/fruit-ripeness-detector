@@ -1,4 +1,5 @@
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
@@ -18,6 +19,15 @@ abstract final class PersistenceCodecs {
     'pending',
     'syncing',
     'synchronized',
+    'failed',
+  };
+
+  static const imageSyncStateCodes = <String>{
+    'local_only',
+    'pending_upload',
+    'uploading',
+    'synchronized',
+    'remote_only',
     'failed',
   };
 
@@ -78,6 +88,25 @@ abstract final class PersistenceCodecs {
     'synchronized' => LocalSyncState.synchronized,
     'failed' => LocalSyncState.failed,
     _ => throw FormatException('Unknown persisted sync-state code: $value'),
+  };
+
+  static String encodeImageSyncState(ImageSyncState value) => switch (value) {
+    ImageSyncState.localOnly => 'local_only',
+    ImageSyncState.pendingUpload => 'pending_upload',
+    ImageSyncState.uploading => 'uploading',
+    ImageSyncState.synchronized => 'synchronized',
+    ImageSyncState.remoteOnly => 'remote_only',
+    ImageSyncState.failed => 'failed',
+  };
+
+  static ImageSyncState decodeImageSyncState(String value) => switch (value) {
+    'local_only' => ImageSyncState.localOnly,
+    'pending_upload' => ImageSyncState.pendingUpload,
+    'uploading' => ImageSyncState.uploading,
+    'synchronized' => ImageSyncState.synchronized,
+    'remote_only' => ImageSyncState.remoteOnly,
+    'failed' => ImageSyncState.failed,
+    _ => throw FormatException('Unsupported image sync state: $value'),
   };
 
   static String encodeOrderStatus(BatchOrderStatus value) => switch (value) {

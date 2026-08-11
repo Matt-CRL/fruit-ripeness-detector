@@ -24,6 +24,9 @@ class Batches extends Table {
   late final TextColumn syncState = text()
       .check(syncState.isIn(PersistenceCodecs.syncStateCodes))
       .withDefault(const Constant('local_only'))();
+  late final IntColumn remoteRevision = integer()
+      .check(remoteRevision.isBiggerOrEqualValue(0))
+      .withDefault(const Constant(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -90,6 +93,12 @@ class ScanRecords extends Table {
   late final TextColumn syncState = text()
       .check(syncState.isIn(PersistenceCodecs.syncStateCodes))
       .withDefault(const Constant('local_only'))();
+  late final IntColumn remoteRevision = integer()
+      .check(remoteRevision.isBiggerOrEqualValue(0))
+      .withDefault(const Constant(0))();
+  late final TextColumn imageSyncState = text()
+      .check(imageSyncState.isIn(PersistenceCodecs.imageSyncStateCodes))
+      .withDefault(const Constant('local_only'))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -151,6 +160,9 @@ class Orders extends Table {
   late final TextColumn syncState = text()
       .check(syncState.isIn(PersistenceCodecs.syncStateCodes))
       .withDefault(const Constant('local_only'))();
+  late final IntColumn remoteRevision = integer()
+      .check(remoteRevision.isBiggerOrEqualValue(0))
+      .withDefault(const Constant(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -170,6 +182,15 @@ class AppSettings extends Table {
   late final BoolColumn imageUploadConsent = boolean().nullable()();
   late final TextColumn consentVersion = text().nullable()();
   late final DateTimeColumn lastSuccessfulSyncAt = dateTime().nullable()();
+  late final DateTimeColumn lastSyncAttemptAt = dateTime().nullable()();
+  late final DateTimeColumn syncCursorAt = dateTime().nullable()();
+  late final TextColumn lastSyncErrorCode = text().nullable()();
+  late final TextColumn syncState = text()
+      .check(syncState.isIn(PersistenceCodecs.syncStateCodes))
+      .withDefault(const Constant('local_only'))();
+  late final IntColumn remoteRevision = integer()
+      .check(remoteRevision.isBiggerOrEqualValue(0))
+      .withDefault(const Constant(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -194,7 +215,7 @@ final class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'kami'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -227,6 +248,31 @@ final class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS scan_records_batch_page_idx '
           'ON scan_records (batch_id, deleted_at, created_at, id)',
         );
+      }
+      if (from < 5) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (tableNames.contains('batches')) {
+          await migrator.addColumn(batches, batches.remoteRevision);
+        }
+        if (tableNames.contains('scan_records')) {
+          await migrator.addColumn(scanRecords, scanRecords.remoteRevision);
+          await migrator.addColumn(scanRecords, scanRecords.imageSyncState);
+        }
+        if (tableNames.contains('orders')) {
+          await migrator.addColumn(orders, orders.remoteRevision);
+        }
+        if (tableNames.contains('app_settings')) {
+          await migrator.addColumn(appSettings, appSettings.lastSyncAttemptAt);
+          await migrator.addColumn(appSettings, appSettings.syncCursorAt);
+          await migrator.addColumn(appSettings, appSettings.lastSyncErrorCode);
+          await migrator.addColumn(appSettings, appSettings.syncState);
+          await migrator.addColumn(appSettings, appSettings.remoteRevision);
+        }
       }
     },
     beforeOpen: (details) async {

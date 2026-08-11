@@ -14,6 +14,7 @@ final class BatchOrder {
     required this.createdAt,
     required this.updatedAt,
     required this.syncState,
+    this.remoteRevision = 0,
     this.ownerId,
     this.deletedAt,
   }) {
@@ -33,6 +34,13 @@ final class BatchOrder {
       updatedAt: updatedAt,
       deletedAt: deletedAt,
     );
+    if (remoteRevision < 0) {
+      throw ArgumentError.value(
+        remoteRevision,
+        'remoteRevision',
+        'must not be negative',
+      );
+    }
   }
 
   final String id;
@@ -46,4 +54,5 @@ final class BatchOrder {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final LocalSyncState syncState;
+  final int remoteRevision;
 }

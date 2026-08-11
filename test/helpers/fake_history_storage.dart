@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
@@ -308,6 +309,7 @@ final class FakeRetainedScanImageStore implements RetainedScanImageStore {
   bool failRemove = false;
   int retainCalls = 0;
   final List<String> removedPaths = [];
+  final List<String> retainedPaths = [];
 
   @override
   Future<RetainedScanImage> retain({
@@ -332,5 +334,15 @@ final class FakeRetainedScanImageStore implements RetainedScanImageStore {
   @override
   Future<String> resolvePath(String relativePath) async {
     return '/virtual/$relativePath';
+  }
+
+  @override
+  Future<RetainedScanImage> storeDownloadedJpeg({
+    required Uint8List bytes,
+    required String scanId,
+  }) async {
+    final relativePath = 'history_images/$scanId.jpg';
+    retainedPaths.add(relativePath);
+    return RetainedScanImage(relativePath: relativePath);
   }
 }

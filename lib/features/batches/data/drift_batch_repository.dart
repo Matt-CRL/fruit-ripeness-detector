@@ -134,6 +134,7 @@ final class DriftBatchRepository implements BatchRepository {
         b.updated_at,
         b.deleted_at,
         b.sync_state,
+        b.remote_revision,
         COUNT(s.id) AS total_count,
         COALESCE(SUM(CASE WHEN s.ripeness_stage = 'unripe' THEN 1 ELSE 0 END), 0)
           AS unripe_count,
@@ -148,7 +149,7 @@ final class DriftBatchRepository implements BatchRepository {
         ON s.batch_id = b.id AND s.deleted_at IS NULL
       WHERE b.deleted_at IS NULL
       GROUP BY b.id, b.owner_id, b.name, b.fruit_type, b.created_at,
-        b.updated_at, b.deleted_at, b.sync_state
+        b.updated_at, b.deleted_at, b.sync_state, b.remote_revision
       ORDER BY b.created_at DESC, b.id DESC
     ''';
     return _database
@@ -176,6 +177,7 @@ final class DriftBatchRepository implements BatchRepository {
                     syncState: PersistenceCodecs.decodeSyncState(
                       row.read<String>('sync_state'),
                     ),
+                    remoteRevision: row.read<int>('remote_revision'),
                   ),
                   summary: BatchSummary(
                     total: row.read<int>('total_count'),
@@ -724,6 +726,7 @@ final class DriftBatchRepository implements BatchRepository {
       updatedAt: row.updatedAt.toUtc(),
       deletedAt: row.deletedAt?.toUtc(),
       syncState: PersistenceCodecs.decodeSyncState(row.syncState),
+      remoteRevision: row.remoteRevision,
     );
   }
 
@@ -865,6 +868,7 @@ final class DriftBatchRepository implements BatchRepository {
       updatedAt: batch.updatedAt,
       deletedAt: Value(batch.deletedAt),
       syncState: Value(PersistenceCodecs.encodeSyncState(batch.syncState)),
+      remoteRevision: Value(batch.remoteRevision),
     );
   }
 }

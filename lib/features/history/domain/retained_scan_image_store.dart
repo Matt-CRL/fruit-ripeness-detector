@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 final class RetainedScanImage {
   const RetainedScanImage({required this.relativePath});
 
@@ -11,6 +13,11 @@ abstract interface class RetainedScanImageStore {
   });
 
   Future<String> resolvePath(String relativePath);
+
+  Future<RetainedScanImage> storeDownloadedJpeg({
+    required Uint8List bytes,
+    required String scanId,
+  });
 
   Future<void> remove(String relativePath);
 }

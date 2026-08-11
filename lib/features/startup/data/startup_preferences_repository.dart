@@ -35,6 +35,7 @@ final class StartupPreferencesRepository implements StartupPreferences {
   static const guestOnboardingCompletedKey =
       'startup.guest_onboarding_completed';
   static const darkModeKey = 'appearance.dark_mode';
+  static const accountOnboardingPrefix = 'startup.account_onboarding.';
 
   final BooleanPreferenceStore _store;
 
@@ -62,6 +63,16 @@ final class StartupPreferencesRepository implements StartupPreferences {
   Future<void> completeGuestOnboarding() async {
     await _store.writeBool(guestSelectedKey, true);
     await _store.writeBool(guestOnboardingCompletedKey, true);
+  }
+
+  @override
+  Future<bool> isAccountOnboardingCompleted(String userId) async {
+    return await _store.readBool('$accountOnboardingPrefix$userId') ?? false;
+  }
+
+  @override
+  Future<void> completeAccountOnboarding(String userId) {
+    return _store.writeBool('$accountOnboardingPrefix$userId', true);
   }
 
   @override

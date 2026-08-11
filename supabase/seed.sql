@@ -1,0 +1,3 @@
+-- Kami intentionally keeps the shared development seed empty.
+-- Database tests create transaction-scoped synthetic users and records.
+-- Never add real accounts, customer details, tokens, or fruit images here.

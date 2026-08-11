@@ -4,6 +4,8 @@ abstract final class AppRoutes {
   static const accountChoice = '/account-choice';
   static const signIn = '/sign-in';
   static const createAccount = '/create-account';
+  static const forgotPassword = '/forgot-password';
+  static const resetPassword = '/reset-password';
   static const home = '/home';
   static const batches = '/batches';
   static const batchCreate = '/batches/new';

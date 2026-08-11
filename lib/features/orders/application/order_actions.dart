@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/persistence/entity_id_generator.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/features/auth/application/current_owner_provider.dart';
 import 'package:kami/features/orders/data/drift_order_repository.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/orders/domain/order_repository.dart';
@@ -18,6 +19,7 @@ final createOrderUseCaseProvider = Provider<CreateOrderUseCase>((ref) {
     ref.watch(orderRepositoryProvider),
     ref.watch(entityIdGeneratorProvider),
     ref.watch(orderUtcNowProvider),
+    ref.watch(currentOwnerIdProvider),
   );
 });
 
@@ -47,11 +49,17 @@ final completeOrderUseCaseProvider = Provider<CompleteOrderUseCase>((ref) {
 });
 
 final class CreateOrderUseCase {
-  const CreateOrderUseCase(this._repository, this._idGenerator, this._utcNow);
+  const CreateOrderUseCase(
+    this._repository,
+    this._idGenerator,
+    this._utcNow, [
+    this._ownerId,
+  ]);
 
   final OrderRepository _repository;
   final EntityIdGenerator _idGenerator;
   final OrderUtcNow _utcNow;
+  final String? _ownerId;
 
   Future<BatchOrder> execute({
     required String batchId,
@@ -63,6 +71,7 @@ final class CreateOrderUseCase {
     final now = _utcNow();
     final order = BatchOrder(
       id: _idGenerator.nextId(),
+      ownerId: _ownerId,
       batchId: batchId,
       customerName: fields.customerName,
       deliveryAddress: fields.deliveryAddress,
@@ -70,7 +79,9 @@ final class CreateOrderUseCase {
       status: BatchOrderStatus.pending,
       createdAt: now,
       updatedAt: now,
-      syncState: LocalSyncState.localOnly,
+      syncState: _ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending,
     );
     try {
       await _repository.create(order);
@@ -110,6 +121,7 @@ final class UpdatePendingOrderUseCase {
       updatedAt: _utcNow(),
       deletedAt: existing.deletedAt,
       syncState: existing.syncState,
+      remoteRevision: existing.remoteRevision,
     );
     try {
       await _repository.updatePending(updated);
