@@ -179,6 +179,7 @@ class Orders extends Table {
 @DataClassName('AppSettingsRow')
 class AppSettings extends Table {
   late final IntColumn id = integer().withDefault(const Constant(1))();
+  late final TextColumn consentAccountId = text().nullable()();
   late final BoolColumn imageUploadConsent = boolean().nullable()();
   late final TextColumn consentVersion = text().nullable()();
   late final DateTimeColumn lastSuccessfulSyncAt = dateTime().nullable()();
@@ -199,9 +200,13 @@ class AppSettings extends Table {
   List<String> get customConstraints => [
     'CHECK (id = 1)',
     '''CHECK (
-      (image_upload_consent IS NULL AND consent_version IS NULL)
+      (consent_account_id IS NULL
+        AND image_upload_consent IS NULL
+        AND consent_version IS NULL)
       OR
-      (image_upload_consent IS NOT NULL
+      (consent_account_id IS NOT NULL
+        AND length(trim(consent_account_id)) > 0
+        AND image_upload_consent IS NOT NULL
         AND consent_version IS NOT NULL
         AND length(trim(consent_version)) > 0)
     )''',
@@ -215,7 +220,7 @@ final class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'kami'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -272,6 +277,17 @@ final class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(appSettings, appSettings.lastSyncErrorCode);
           await migrator.addColumn(appSettings, appSettings.syncState);
           await migrator.addColumn(appSettings, appSettings.remoteRevision);
+        }
+      }
+      if (from < 6) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (tableNames.contains('app_settings')) {
+          await migrator.addColumn(appSettings, appSettings.consentAccountId);
         }
       }
     },

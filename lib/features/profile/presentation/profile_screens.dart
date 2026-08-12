@@ -5,9 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/main_shell.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/theme/theme_mode_controller.dart';
-import 'package:kami/features/account/application/account_export_service.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/account/application/account_session_service.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
+import 'package:kami/features/auth/domain/auth_repository.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 import 'package:kami/features/sync/application/sync_coordinator.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
@@ -121,7 +122,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.status == SyncStatus.failed
+            result.status == SyncStatus.failed &&
+                    result.failureCategory == SyncFailureCategory.record
+                ? 'Some saved items need attention. Other items were synchronized.'
+                : result.status == SyncStatus.failed
                 ? 'Sync could not finish. Check your connection and retry.'
                 : result.conflicts > 0
                 ? 'Sync finished. A newer cloud change replaced a stale local edit.'
@@ -133,6 +137,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _setPhotoConsent(bool consent) async {
+    final account = ref.read(currentAccountProvider);
+    if (account == null) return;
     if (!consent) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -160,33 +166,66 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _accountActionRunning = true);
     await ref
         .read(localSyncStoreProvider)
-        .setImageUploadConsent(consent: consent, authenticated: true);
+        .setImageUploadConsent(
+          ownerId: account.id,
+          consent: consent,
+          authenticated: true,
+        );
     await ref.read(syncCoordinatorProvider).syncNow(SyncTrigger.manualRetry);
     if (mounted) setState(() => _accountActionRunning = false);
   }
 
-  Future<void> _exportAccount() async {
+  Future<void> _editDisplayName() async {
+    final account = ref.read(currentAccountProvider);
+    if (account == null) return;
+    final controller = TextEditingController(text: account.displayName ?? '');
+    final formKey = GlobalKey<FormState>();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit display name'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Display name'),
+            validator: (value) {
+              final length = (value?.trim() ?? '').runes.length;
+              return length < 2 || length > 50
+                  ? 'Use 2 to 50 characters.'
+                  : null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.of(dialogContext).pop(controller.text.trim());
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
     setState(() => _accountActionRunning = true);
     try {
-      final result = await ref
-          .read(accountExportServiceProvider)
-          .exportAndShare();
+      await ref.read(authRepositoryProvider).updateDisplayName(value);
+      ref.invalidate(currentAccountProvider);
+    } on AccountAuthException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result.missingPhotoCount == 0
-                  ? 'Export shared with ${result.scanCount} scans.'
-                  : 'Export shared; ${result.missingPhotoCount} photos were unavailable.',
-            ),
-          ),
+          SnackBar(content: Text(error.message)),
         );
-      }
-    } on AccountExportException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } finally {
       if (mounted) setState(() => _accountActionRunning = false);
@@ -277,17 +316,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
-          'Deletion is immediate and permanent. You can export your account '
-          'data before continuing.',
+          'Deletion is immediate and permanent. Your account and cloud data '
+          'will be removed.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('export'),
-            child: const Text('Export first'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop('delete'),
@@ -296,10 +331,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-    if (choice == 'export') {
-      await _exportAccount();
-      return;
-    }
     if (choice != 'delete' || !mounted) return;
     final passwordController = TextEditingController();
     final password = await showDialog<String>(
@@ -356,7 +387,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (account != null) {
       return _buildAccountProfile(
         context,
+        accountId: account.id,
         accountEmail: account.email,
+        accountDisplayName: account.displayName,
         colorScheme: colorScheme,
         themeMode: themeMode,
       );
@@ -365,11 +398,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          8,
-          20,
-          32 + mainNavigationContentBottomInset(context),
+        padding: KamiResponsive.pagePadding(
+          context,
+          top: 8,
+          bottom: 32 + mainNavigationContentBottomInset(context),
         ),
         children: [
           Card(
@@ -504,7 +536,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _buildAccountProfile(
     BuildContext context, {
+    required String accountId,
     required String accountEmail,
+    required String? accountDisplayName,
     required ColorScheme colorScheme,
     required ThemeMode themeMode,
   }) {
@@ -516,17 +550,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       SyncStatus.idle => 'Ready to synchronize',
       SyncStatus.syncing => 'Synchronizing…',
       SyncStatus.upToDate => 'Up to date',
-      SyncStatus.failed => 'Sync needs attention',
+      SyncStatus.failed => status.failureCategory == SyncFailureCategory.record
+          ? 'Some saved items need attention'
+          : 'Sync needs attention',
       SyncStatus.conflict => 'Up to date with a resolved conflict',
     };
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          8,
-          20,
-          32 + mainNavigationContentBottomInset(context),
+        padding: KamiResponsive.pagePadding(
+          context,
+          top: 8,
+          bottom: 32 + mainNavigationContentBottomInset(context),
         ),
         children: [
           Card(
@@ -537,8 +572,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 backgroundColor: colorScheme.primaryContainer,
                 child: Icon(Icons.person_outline, color: colorScheme.primary),
               ),
-              title: const Text('Kami account'),
+              title: Text(accountDisplayName ?? 'Kami account'),
               subtitle: Text(accountEmail),
+              trailing: IconButton(
+                tooltip: 'Edit display name',
+                onPressed: _accountActionRunning ? null : _editDisplayName,
+                icon: const Icon(Icons.edit_outlined),
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -586,20 +626,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               children: [
                 SwitchListTile(
-                  value: settings?.imageUploadConsent ?? false,
+                  value: settings?.consentAccountId == accountId
+                      ? settings?.imageUploadConsent ?? false
+                      : false,
                   onChanged: _accountActionRunning ? null : _setPhotoConsent,
                   secondary: const Icon(Icons.photo_outlined),
                   title: const Text('Cloud photo backup'),
                   subtitle: const Text(
                     'Metadata synchronizes even when this is off.',
                   ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.archive_outlined),
-                  title: const Text('Export account data'),
-                  subtitle: const Text('ZIP with JSON and available photos'),
-                  onTap: _accountActionRunning ? null : _exportAccount,
                 ),
               ],
             ),

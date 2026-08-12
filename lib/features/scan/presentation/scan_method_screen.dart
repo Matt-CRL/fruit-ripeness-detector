@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/theme/app_colors.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 
 class ScanMethodScreen extends StatelessWidget {
   const ScanMethodScreen({super.key});
@@ -11,7 +12,7 @@ class ScanMethodScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Scan fruit')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        padding: KamiResponsive.pagePadding(context, top: 16, bottom: 32),
         children: [
           Center(
             child: ConstrainedBox(

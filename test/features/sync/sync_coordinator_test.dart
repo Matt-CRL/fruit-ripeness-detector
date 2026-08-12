@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:drift/native.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kami/core/database/app_database.dart';
@@ -24,6 +23,7 @@ import '../../helpers/fake_history_storage.dart';
 const _ownerId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const _batchId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const _scanId = '11111111-1111-4111-8111-111111111111';
+const _secondScanId = '22222222-2222-4222-8222-222222222222';
 const _orderId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 final _now = DateTime.utc(2026, 8, 10, 8);
 
@@ -112,6 +112,116 @@ void main() {
     expect(row.remoteRevision, 2);
     expect(row.syncState, 'synchronized');
   });
+
+  test('continues unrelated records after a rejected metadata push', () async {
+    final scans = DriftScanRecordRepository(database);
+    await scans.create(_pendingScan(_scanId));
+    await scans.create(
+      _pendingScan(
+        _secondScanId,
+        createdAt: _now.add(const Duration(minutes: 1)),
+      ),
+    );
+    gateway.rejectRecordIds.add(_scanId);
+
+    final result = await container
+        .read(syncCoordinatorProvider)
+        .syncNow(SyncTrigger.manualRetry);
+
+    expect(result.status, SyncStatus.failed);
+    expect(result.failureCategory, SyncFailureCategory.record);
+    expect(gateway.pushOrder, [
+      '${SyncTable.scanRecords.name}:$_scanId',
+      '${SyncTable.scanRecords.name}:$_secondScanId',
+    ]);
+    final rows = await (database.select(database.scanRecords)
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
+    expect(rows.first.syncState, 'failed');
+    expect(rows.last.syncState, 'synchronized');
+    expect(rows.last.remoteRevision, 1);
+  });
+
+  test('automatically downloads account photos after metadata pull', () async {
+    final imageKey = '$_ownerId/$_scanId/history.jpg';
+    gateway.seed(
+      RemoteSyncRecord(
+        table: SyncTable.userSettings,
+        id: _ownerId,
+        userId: _ownerId,
+        values: {
+          'image_upload_consent': true,
+          'consent_version': 'development-draft-v1',
+          'created_at': _now.toIso8601String(),
+          'updated_at': _now.toIso8601String(),
+          'deleted_at': null,
+        },
+        revision: 1,
+        serverChangedAt: _now,
+      ),
+    );
+    gateway.seed(
+      RemoteSyncRecord(
+        table: SyncTable.scanRecords,
+        id: _scanId,
+        userId: _ownerId,
+        values: {
+          'batch_id': null,
+          'fruit_type': 'carabao_mango',
+          'ripeness_stage': 'ripe',
+          'model_confidence': 0.91,
+          'model_version': 'synthetic-model-v1',
+          'result_origin': 'on_device_model',
+          'shelf_life_status': 'available',
+          'shelf_life_minimum': 2,
+          'shelf_life_maximum': 4,
+          'shelf_life_unit': 'days',
+          'shelf_life_guidance': 'Synthetic guidance.',
+          'shelf_life_reason': null,
+          'shelf_life_evidence_version': 'evidence-v1',
+          'remote_image_key': imageKey,
+          'created_at': _now.toIso8601String(),
+          'updated_at': _now.toIso8601String(),
+          'deleted_at': null,
+        },
+        revision: 1,
+        serverChangedAt: _now,
+      ),
+    );
+
+    final result = await container
+        .read(syncCoordinatorProvider)
+        .syncNow(SyncTrigger.startup);
+
+    expect(result.status, SyncStatus.upToDate);
+    expect(gateway.downloadCalls, [imageKey]);
+    final row = await database.select(database.scanRecords).getSingle();
+    expect(row.localImageRelativePath, 'history_images/$_scanId.jpg');
+    expect(row.imageSyncState, 'synchronized');
+  });
+}
+
+SavedScanRecord _pendingScan(String id, {DateTime? createdAt}) {
+  final timestamp = createdAt ?? _now;
+  return SavedScanRecord(
+    id: id,
+    ownerId: _ownerId,
+    fruit: FruitIdentifier.carabaoMango,
+    ripeness: RipenessStage.ripe,
+    modelConfidence: 0.91,
+    modelVersion: 'synthetic-model-v1',
+    resultOrigin: ResultOrigin.onDeviceModel,
+    shelfLife: const ShelfLifeRange(
+      minimum: 2,
+      maximum: 4,
+      unit: 'days',
+      storageGuidance: 'Synthetic guidance.',
+      evidenceVersion: 'evidence-v1',
+    ),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    syncState: LocalSyncState.pending,
+  );
 }
 
 Future<void> _createPendingGraph(AppDatabase database) async {
@@ -167,6 +277,8 @@ Future<void> _createPendingGraph(AppDatabase database) async {
 final class FakeSyncGateway implements SyncGateway {
   final Map<String, RemoteSyncRecord> _records = {};
   final List<String> pushOrder = [];
+  final Set<String> rejectRecordIds = {};
+  final List<String> downloadCalls = [];
 
   void seed(RemoteSyncRecord record) {
     _records[_key(record.table, record.id)] = record;
@@ -182,6 +294,9 @@ final class FakeSyncGateway implements SyncGateway {
     required int expectedRevision,
   }) async {
     pushOrder.add('${record.table.name}:${record.id}');
+    if (rejectRecordIds.contains(record.id)) {
+      throw StateError('Synthetic rejected metadata push.');
+    }
     final key = _key(record.table, record.id);
     final existing = _records[key];
     if (existing == null && expectedRevision != 0 ||
@@ -228,8 +343,10 @@ final class FakeSyncGateway implements SyncGateway {
   }) async {}
 
   @override
-  Future<Uint8List> downloadHistoryImage(String objectKey) async =>
-      Uint8List(0);
+  Future<Uint8List> downloadHistoryImage(String objectKey) async {
+    downloadCalls.add(objectKey);
+    return Uint8List(0);
+  }
 
   @override
   Future<void> deleteHistoryImages(Iterable<String> objectKeys) async {}

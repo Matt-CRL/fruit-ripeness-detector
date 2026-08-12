@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/router/main_shell.dart';
 import 'package:kami/app/theme/app_colors.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/core/widgets/feature_empty_state_card.dart';
 import 'package:kami/features/batches/application/batch_actions.dart';
 import 'package:kami/features/batches/domain/fruit_batch.dart';
@@ -54,7 +55,23 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
     }
 
     final contentSlivers = ref.watch(activeBatchListProvider).when<List<Widget>>(
-          loading: () => [const SliverToBoxAdapter(child: _BatchLoading())],
+          loading: () => [
+            SliverToBoxAdapter(
+              child: _batchBounded(
+                context,
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: KamiResponsive.value(
+                      context,
+                      regular: 20,
+                      compact: 12,
+                    ),
+                  ),
+                  child: _BatchLoading(),
+                ),
+              ),
+            ),
+          ],
           error: (error, stackTrace) => [
             SliverToBoxAdapter(
               child: _batchBounded(
@@ -77,17 +94,21 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
                       SliverToBoxAdapter(
                         child: _batchBounded(
                           context,
-                          FeatureEmptyStateCard(
-                            icon: Icons.inventory_2_outlined,
-                            title: 'No batches yet',
-                            message:
-                                'Create an empty batch here, or save a scan and '
-                                'choose Save & Add to Batch.',
-                            statusLabel: 'Ready offline',
-                            action: OutlinedButton.icon(
-                              onPressed: createBatch,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Create first batch'),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: KamiResponsive.value(
+                                context,
+                                regular: 20,
+                                compact: 12,
+                              ),
+                            ),
+                            child: FeatureEmptyStateCard(
+                              icon: Icons.inventory_2_outlined,
+                              title: 'No batches yet',
+                              message:
+                                  'Create an empty batch here, or save a scan and '
+                                  'choose Save & Add to Batch.',
+                              statusLabel: 'Ready offline',
                             ),
                           ),
                         ),
@@ -125,8 +146,12 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: KamiResponsive.value(
+                                  context,
+                                  regular: 20,
+                                  compact: 12,
+                                ),
                               ),
                               child: _BatchFilterEmpty(
                                 query: _searchQuery.trim(),
@@ -157,7 +182,20 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
                       child: _batchBounded(
                         context,
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                          padding: EdgeInsets.fromLTRB(
+                            KamiResponsive.value(
+                              context,
+                              regular: 20,
+                              compact: 12,
+                            ),
+                            0,
+                            KamiResponsive.value(
+                              context,
+                              regular: 20,
+                              compact: 12,
+                            ),
+                            12,
+                          ),
                           child: Text(
                             '${filtered.length} ${filtered.length == 1 ? 'batch' : 'batches'}',
                             style: Theme.of(context).textTheme.labelLarge,
@@ -172,7 +210,20 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
                         return _batchBounded(
                           context,
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                            padding: EdgeInsets.fromLTRB(
+                              KamiResponsive.value(
+                                context,
+                                regular: 20,
+                                compact: 12,
+                              ),
+                              0,
+                              KamiResponsive.value(
+                                context,
+                                regular: 20,
+                                compact: 12,
+                              ),
+                              12,
+                            ),
                             child: _BatchCard(
                               snapshot: item,
                               order: ordersByBatch[item.batch.id],
@@ -200,7 +251,12 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
               child: _batchBounded(
                 context,
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  padding: EdgeInsets.fromLTRB(
+                    KamiResponsive.value(context, regular: 20, compact: 12),
+                    8,
+                    KamiResponsive.value(context, regular: 20, compact: 12),
+                    20,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -548,7 +604,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   Widget _buildBody({FruitIdentifier? lockedFruit, int? selectedScanCount}) {
     final fruit = lockedFruit ?? _fruit;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+      padding: KamiResponsive.pagePadding(context, top: 8, bottom: 36),
       children: [
         Center(
           child: ConstrainedBox(
@@ -701,7 +757,7 @@ class _BatchDetails extends StatelessWidget {
     final previewScans = snapshot.scans.take(_batchScanPreviewLimit).toList();
     final hasMoreScans = snapshot.scans.length > _batchScanPreviewLimit;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+      padding: KamiResponsive.pagePadding(context, top: 8, bottom: 36),
       children: [
         Center(
           child: ConstrainedBox(
@@ -1054,7 +1110,7 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
       filteredScans.map((scan) => scan.id).toSet(),
     );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+      padding: KamiResponsive.pagePadding(context, top: 8, bottom: 36),
       children: [
         Center(
           child: ConstrainedBox(

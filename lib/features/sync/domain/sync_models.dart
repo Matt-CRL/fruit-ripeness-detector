@@ -4,6 +4,8 @@ enum SyncTrigger { signIn, startup, resume, localWrite, refresh, manualRetry }
 
 enum SyncStatus { idle, syncing, upToDate, failed, conflict }
 
+enum SyncFailureCategory { none, connection, record }
+
 enum SyncTable { batches, scanRecords, orders, userSettings }
 
 final class SyncRunResult {
@@ -14,6 +16,7 @@ final class SyncRunResult {
     required this.conflicts,
     this.completedAt,
     this.errorCode,
+    this.failureCategory = SyncFailureCategory.none,
   });
 
   const SyncRunResult.notConfigured()
@@ -22,7 +25,8 @@ final class SyncRunResult {
       pulled = 0,
       conflicts = 0,
       completedAt = null,
-      errorCode = 'cloud_not_configured';
+      errorCode = 'cloud_not_configured',
+      failureCategory = SyncFailureCategory.none;
 
   final SyncStatus status;
   final int pushed;
@@ -30,6 +34,7 @@ final class SyncRunResult {
   final int conflicts;
   final DateTime? completedAt;
   final String? errorCode;
+  final SyncFailureCategory failureCategory;
 }
 
 final class SyncStatusSnapshot {
@@ -38,12 +43,14 @@ final class SyncStatusSnapshot {
     this.lastSuccessfulSyncAt,
     this.errorCode,
     this.conflictCount = 0,
+    this.failureCategory = SyncFailureCategory.none,
   });
 
   final SyncStatus status;
   final DateTime? lastSuccessfulSyncAt;
   final String? errorCode;
   final int conflictCount;
+  final SyncFailureCategory failureCategory;
 
   SyncStatusSnapshot copyWith({
     SyncStatus? status,
@@ -52,6 +59,7 @@ final class SyncStatusSnapshot {
     String? errorCode,
     bool clearErrorCode = false,
     int? conflictCount,
+    SyncFailureCategory? failureCategory,
   }) {
     return SyncStatusSnapshot(
       status: status ?? this.status,
@@ -60,6 +68,7 @@ final class SyncStatusSnapshot {
           : lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
       errorCode: clearErrorCode ? null : errorCode ?? this.errorCode,
       conflictCount: conflictCount ?? this.conflictCount,
+      failureCategory: failureCategory ?? this.failureCategory,
     );
   }
 }
@@ -114,6 +123,7 @@ final class PullPage {
 
 final class LocalSyncSettings {
   const LocalSyncSettings({
+    this.consentAccountId,
     this.imageUploadConsent,
     this.consentVersion,
     this.lastSuccessfulSyncAt,
@@ -124,6 +134,7 @@ final class LocalSyncSettings {
     this.syncState = LocalSyncState.localOnly,
   });
 
+  final String? consentAccountId;
   final bool? imageUploadConsent;
   final String? consentVersion;
   final DateTime? lastSuccessfulSyncAt;

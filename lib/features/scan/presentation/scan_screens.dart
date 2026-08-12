@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/database/app_database_provider.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/scan/application/scan_service_providers.dart';
@@ -219,7 +220,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Upload image')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
         children: [
           Center(
             child: ConstrainedBox(
@@ -693,7 +694,7 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Assessment result')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
         children: [
           Center(
             child: ConstrainedBox(
@@ -1170,7 +1171,7 @@ class LowConfidenceResultScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Low-confidence result')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
         children: [
           Center(
             child: ConstrainedBox(

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/database/app_database_provider.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/scan/application/live_camera.dart';
@@ -165,6 +166,12 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     }
   }
 
+  void _openHistoryAfterSave() {
+    context.go(
+      '${AppRoutes.history}?refresh=${DateTime.now().microsecondsSinceEpoch}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -195,7 +202,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
           onViewBatch: _assignedBatchId == null
               ? null
               : () => context.push(AppRoutes.batchDetails(_assignedBatchId!)),
-          onViewHistory: () => context.go(AppRoutes.history),
+          onViewHistory: _openHistoryAfterSave,
         ),
       },
     );
@@ -262,57 +269,70 @@ class _LiveCameraBody extends StatelessWidget {
       return const _LiveScanLoading();
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _CoverCameraPreview(session: session),
-              const _FruitFramingOverlay(),
-              if (controller.phase == LiveScanPhase.paused)
-                ColoredBox(
-                  color: const Color(0x66000000),
-                  child: Center(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surface,
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _CoverCameraPreview(session: session),
+                const _FruitFramingOverlay(),
+                if (controller.phase == LiveScanPhase.paused)
+                  ColoredBox(
+                    color: const Color(0x66000000),
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        child: Text(
-                          'Scanning paused',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            'Scanning paused',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        _LiveResultPanel(
-          controller: controller,
-          saving: saving,
-          savedRecord: savedRecord,
-          assignedBatchId: assignedBatchId,
-          saveError: saveError,
-          onSave: onSave,
-          onPause: onPause,
-          onResume: onResume,
-          onScanAnother: onScanAnother,
-          onAddToBatch: onAddToBatch,
-          onViewBatch: onViewBatch,
-          onViewHistory: onViewHistory,
-        ),
-      ],
+          Flexible(
+            fit: FlexFit.loose,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+              ),
+              child: SingleChildScrollView(
+                child: _LiveResultPanel(
+                  controller: controller,
+                  saving: saving,
+                  savedRecord: savedRecord,
+                  assignedBatchId: assignedBatchId,
+                  saveError: saveError,
+                  onSave: onSave,
+                  onPause: onPause,
+                  onResume: onResume,
+                  onScanAnother: onScanAnother,
+                  onAddToBatch: onAddToBatch,
+                  onViewBatch: onViewBatch,
+                  onViewHistory: onViewHistory,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -426,6 +446,7 @@ class _LiveResultPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = KamiResponsive.isCompactPhone(context);
     final result = controller.result;
     final paused = controller.phase == LiveScanPhase.paused;
     final saved = savedRecord != null;
@@ -434,7 +455,12 @@ class _LiveResultPanel extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+          padding: EdgeInsets.fromLTRB(
+            compact ? 16 : 20,
+            compact ? 12 : 16,
+            compact ? 16 : 20,
+            compact ? 12 : 18,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -461,6 +487,10 @@ class _LiveResultPanel extends StatelessWidget {
                 )
               else
                 _LiveClassification(result: result),
+              if (savedRecord case final record?) ...[
+                const SizedBox(height: 10),
+                _LiveShelfLifeSummary(estimate: record.shelfLife),
+              ],
               const SizedBox(height: 10),
               Text(
                 'Model validation is incomplete. Treat this as decision support, not a guaranteed assessment.',
@@ -480,34 +510,39 @@ class _LiveResultPanel extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed:
-                    result == null || result.requiresRetake || saving || saved
-                    ? null
-                    : () => unawaited(onSave()),
-                icon: saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: 'Saving live result',
-                        ),
-                      )
-                    : Icon(
-                        saved
-                            ? Icons.check_circle_outline
-                            : Icons.save_outlined,
-                      ),
-                label: Text(
-                  saving
-                      ? 'Saving...'
-                      : saved
-                      ? 'Saved to History'
-                      : 'Save Result',
+              if (!saved) ...[
+                FilledButton.icon(
+                  onPressed: result == null || result.requiresRetake || saving
+                      ? null
+                      : () => unawaited(onSave()),
+                  icon: saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            semanticsLabel: 'Saving live result',
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(saving ? 'Saving...' : 'Save Result'),
                 ),
-              ),
-              const SizedBox(height: 10),
-              if (saved) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: saving
+                      ? null
+                      : paused
+                      ? () => unawaited(onResume())
+                      : () => unawaited(onPause()),
+                  icon: Icon(paused ? Icons.play_arrow : Icons.pause),
+                  label: Text(paused ? 'Resume scanning' : 'Pause result'),
+                ),
+              ] else ...[
+                FilledButton.icon(
+                  onPressed: () => unawaited(onScanAnother()),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Scan another fruit'),
+                ),
+                const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: assignedBatchId == null
                       ? onAddToBatch
@@ -522,27 +557,12 @@ class _LiveResultPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                OutlinedButton.icon(
+                TextButton.icon(
                   onPressed: onViewHistory,
                   icon: const Icon(Icons.history),
                   label: const Text('View in History'),
                 ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: () => unawaited(onScanAnother()),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Scan another fruit'),
-                ),
-              ] else
-                OutlinedButton.icon(
-                  onPressed: saving
-                      ? null
-                      : paused
-                      ? () => unawaited(onResume())
-                      : () => unawaited(onPause()),
-                  icon: Icon(paused ? Icons.play_arrow : Icons.pause),
-                  label: Text(paused ? 'Resume scanning' : 'Pause result'),
-                ),
+              ],
             ],
           ),
         ),
@@ -596,6 +616,77 @@ class _LiveClassification extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LiveShelfLifeSummary extends StatelessWidget {
+  const _LiveShelfLifeSummary({required this.estimate});
+
+  final ShelfLifeEstimate estimate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final compact = KamiResponsive.isCompactPhone(context);
+    final (estimateLabel, storageGuidance) = switch (estimate) {
+      ShelfLifeRange(
+        :final minimum,
+        :final maximum,
+        :final unit,
+        :final storageGuidance,
+      ) =>
+        ('Estimated shelf life: $minimum-$maximum $unit', storageGuidance),
+      ShelfLifeConsumeImmediately(:final storageGuidance) => (
+        'Estimated shelf life: Consume immediately',
+        storageGuidance,
+      ),
+      ShelfLifeUnavailable(:final reason) => (
+        'Estimated shelf life: Unavailable',
+        reason,
+      ),
+    };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.55,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 14,
+          vertical: compact ? 8 : 10,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              estimateLabel,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'Storage: $storageGuidance',
+              maxLines: compact ? 2 : 3,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'Based on provisional literature-informed rules. Actual quality may vary.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

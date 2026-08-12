@@ -100,6 +100,7 @@ final class LocalSyncStore {
           .insertOnConflictUpdate(
             AppSettingsCompanion.insert(
               id: const Value(1),
+              consentAccountId: Value(ownerId),
               imageUploadConsent: Value(imageUploadConsent),
               consentVersion: Value(consentVersion),
               syncState: Value(pending),
@@ -175,6 +176,15 @@ final class LocalSyncStore {
     return _settingsFromRow(row);
   }
 
+  /// A consent decision only applies to the account that made it on this
+  /// device. A stale decision from another account must not enable uploads.
+  Future<bool?> photoConsentForAccount(String ownerId) async {
+    final settings = await readSettings();
+    return settings.consentAccountId == ownerId
+        ? settings.imageUploadConsent
+        : null;
+  }
+
   Stream<LocalSyncSettings> watchSettings() {
     final query = _database.select(_database.appSettings)
       ..where((row) => row.id.equals(1));
@@ -222,6 +232,7 @@ final class LocalSyncStore {
   }
 
   Future<void> setImageUploadConsent({
+    required String ownerId,
     required bool consent,
     required bool authenticated,
     String consentVersion = developmentConsentVersion,
@@ -235,6 +246,7 @@ final class LocalSyncStore {
           .insertOnConflictUpdate(
             AppSettingsCompanion.insert(
               id: const Value(1),
+              consentAccountId: Value(ownerId),
               imageUploadConsent: Value(consent),
               consentVersion: Value(consentVersion),
               syncState: Value(PersistenceCodecs.encodeSyncState(state)),
@@ -243,7 +255,7 @@ final class LocalSyncStore {
       if (authenticated && consent) {
         await (_database.update(_database.scanRecords)..where(
               (row) =>
-                  row.ownerId.isNotNull() &
+                  row.ownerId.equals(ownerId) &
                   row.deletedAt.isNull() &
                   row.localImageRelativePath.isNotNull() &
                   row.remoteImageKey.isNull(),
@@ -554,6 +566,7 @@ final class LocalSyncStore {
               .insertOnConflictUpdate(
                 AppSettingsCompanion.insert(
                   id: const Value(1),
+                  consentAccountId: Value(remote.userId),
                   imageUploadConsent: Value(
                     _requiredBool(remote.values, 'image_upload_consent'),
                   ),
@@ -646,6 +659,17 @@ final class LocalSyncStore {
   Future<List<ScanRecordRow>> scansWithRemoteImages(String userId) {
     return (_database.select(_database.scanRecords)..where(
           (row) => row.ownerId.equals(userId) & row.remoteImageKey.isNotNull(),
+        ))
+        .get();
+  }
+
+  Future<List<ScanRecordRow>> remoteOnlyScans(String userId) {
+    return (_database.select(_database.scanRecords)..where(
+          (row) =>
+              row.ownerId.equals(userId) &
+              row.deletedAt.isNull() &
+              row.remoteImageKey.isNotNull() &
+              row.localImageRelativePath.isNull(),
         ))
         .get();
   }
@@ -837,6 +861,7 @@ final class LocalSyncStore {
 
   static LocalSyncSettings _settingsFromRow(AppSettingsRow row) {
     return LocalSyncSettings(
+      consentAccountId: row.consentAccountId,
       imageUploadConsent: row.imageUploadConsent,
       consentVersion: row.consentVersion,
       lastSuccessfulSyncAt: row.lastSuccessfulSyncAt?.toUtc(),
@@ -856,10 +881,13 @@ final class LocalSyncStore {
     if (localRevision != null && localRevision >= remoteRevision) {
       return LocalApplyResult.ignoredAsDuplicate;
     }
-    if (localSyncState != null &&
-        PersistenceCodecs.decodeSyncState(localSyncState) !=
-            LocalSyncState.synchronized) {
-      return LocalApplyResult.replacedPendingConflict;
+    if (localSyncState != null) {
+      final state = PersistenceCodecs.decodeSyncState(localSyncState);
+      if (state == LocalSyncState.pending ||
+          state == LocalSyncState.syncing ||
+          state == LocalSyncState.failed) {
+        return LocalApplyResult.replacedPendingConflict;
+      }
     }
     return LocalApplyResult.applied;
   }

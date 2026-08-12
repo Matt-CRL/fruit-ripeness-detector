@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 
@@ -45,11 +46,17 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final accountsAvailable = ref.watch(authRepositoryProvider).isConfigured;
+    final compact = KamiResponsive.isCompactPhone(context);
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 20,
+              compact ? 8 : 16,
+              compact ? 12 : 20,
+              compact ? 20 : 32,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
@@ -57,21 +64,21 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                 children: [
                   Center(
                     child: Container(
-                      width: 80,
-                      height: 80,
+                      width: compact ? 64 : 80,
+                      height: compact ? 64 : 80,
                       decoration: BoxDecoration(
                         color: colorScheme.primaryContainer,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.eco,
-                        size: 44,
+                        size: compact ? 36 : 44,
                         color: colorScheme.primary,
                         semanticLabel: 'Kami leaf',
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: compact ? 12 : 18),
                   Text(
                     'Welcome to Kami',
                     style: Theme.of(context).textTheme.headlineLarge,
@@ -82,10 +89,10 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                     'Check fruit ripeness in a few steps.',
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: compact ? 12 : 18),
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(compact ? 12 : 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -111,7 +118,7 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                             'No account or internet needed.',
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: compact ? 12 : 16),
                           FilledButton(
                             onPressed: _isStartingGuestMode
                                 ? null
@@ -129,7 +136,7 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: compact ? 12 : 20),
                   Text(
                     'Other options',
                     style: Theme.of(context).textTheme.titleMedium,
@@ -142,7 +149,7 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                         : 'Online accounts are not configured in this build.',
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: compact ? 12 : 16),
                   OutlinedButton.icon(
                     onPressed: _isStartingGuestMode || !accountsAvailable
                         ? null

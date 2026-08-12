@@ -25,7 +25,7 @@ void main() {
       batchId: _batchId,
       customerName: '  Ada Lovelace  ',
       deliveryAddress: '  1 Market Street  ',
-      deliveryDate: DateTime.utc(2026, 8, 5),
+      deliveryDate: DateTime.utc(2026, 8, 2),
     );
 
     expect(order.id, _orderId);
@@ -47,14 +47,14 @@ void main() {
       batchId: _batchId,
       customerName: 'Ada',
       deliveryAddress: 'First address',
-      deliveryDate: DateTime.utc(2026, 8, 5),
+      deliveryDate: DateTime.utc(2026, 8, 2),
     );
 
     await UpdatePendingOrderUseCase(repository, () => _updatedAt).execute(
       existing: order,
       customerName: 'Grace',
       deliveryAddress: 'Second address',
-      deliveryDate: DateTime.utc(2026, 8, 6),
+      deliveryDate: DateTime.utc(2026, 8, 2),
     );
     final updated = await repository.findActiveForBatch(_batchId);
     expect(updated?.customerName, 'Grace');
@@ -83,7 +83,7 @@ void main() {
           batchId: _batchId,
           customerName: 'Ada',
           deliveryAddress: 'Address',
-          deliveryDate: DateTime.utc(2026, 8, 5),
+          deliveryDate: DateTime.utc(2026, 8, 2),
         );
 
     await CancelPendingOrderUseCase(
@@ -108,7 +108,7 @@ void main() {
         batchId: _batchId,
         customerName: ' ',
         deliveryAddress: 'Address',
-        deliveryDate: DateTime.utc(2026, 8, 5),
+        deliveryDate: DateTime.utc(2026, 8, 2),
       ),
       throwsA(
         isA<OrderActionException>().having(
@@ -119,6 +119,73 @@ void main() {
       ),
     );
     expect(await repository.findActiveForBatch(_batchId), isNull);
+  });
+
+  test('rejects a delivery date before the current day', () async {
+    final repository = FakeOrderRepository();
+    addTearDown(repository.dispose);
+    final now = DateTime.utc(2026, 8, 5, 10);
+    final useCase = CreateOrderUseCase(
+      repository,
+      const _FixedIdGenerator(),
+      () => now,
+    );
+
+    await expectLater(
+      useCase.execute(
+        batchId: _batchId,
+        customerName: 'Ada',
+        deliveryAddress: 'Address',
+        deliveryDate: DateTime.utc(2026, 8, 4),
+      ),
+      throwsA(
+        isA<OrderActionException>().having(
+          (error) => error.message,
+          'message',
+          'Delivery date cannot be earlier than today.',
+        ),
+      ),
+    );
+    expect(await repository.findActiveForBatch(_batchId), isNull);
+  });
+
+  test('rejects a past date when editing a Pending order', () async {
+    final repository = FakeOrderRepository();
+    addTearDown(repository.dispose);
+    final create = CreateOrderUseCase(
+      repository,
+      const _FixedIdGenerator(),
+      () => DateTime.utc(2026, 8, 5, 10),
+    );
+    final order = await create.execute(
+      batchId: _batchId,
+      customerName: 'Ada',
+      deliveryAddress: 'Address',
+      deliveryDate: DateTime.utc(2026, 8, 5),
+    );
+
+    await expectLater(
+      UpdatePendingOrderUseCase(
+        repository,
+        () => DateTime.utc(2026, 8, 5, 11),
+      ).execute(
+        existing: order,
+        customerName: 'Ada',
+        deliveryAddress: 'Address',
+        deliveryDate: DateTime.utc(2026, 8, 4),
+      ),
+      throwsA(
+        isA<OrderActionException>().having(
+          (error) => error.message,
+          'message',
+          'Delivery date cannot be earlier than today.',
+        ),
+      ),
+    );
+    expect(
+      (await repository.findActiveForBatch(_batchId))?.deliveryDate,
+      DateTime.utc(2026, 8, 5),
+    );
   });
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 
@@ -130,6 +131,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = KamiResponsive.isCompactPhone(context);
     final isLastPage = _currentPage == _slides.length - 1;
 
     return PopScope(
@@ -162,12 +164,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     setState(() => _currentPage = page);
                   },
                   itemBuilder: (context, index) {
-                    return _OnboardingSlide(content: _slides[index]);
+                    return _OnboardingSlide(
+                      key: ValueKey('onboarding-slide-$index'),
+                      content: _slides[index],
+                    );
                   },
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 12 : 20,
+                  compact ? 6 : 12,
+                  compact ? 12 : 20,
+                  compact ? 12 : 20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -190,7 +200,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    SizedBox(height: compact ? 12 : 18),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
@@ -234,14 +244,20 @@ class _OnboardingContent {
 }
 
 class _OnboardingSlide extends StatelessWidget {
-  const _OnboardingSlide({required this.content});
+  const _OnboardingSlide({required this.content, super.key});
 
   final _OnboardingContent content;
 
   @override
   Widget build(BuildContext context) {
+    final compact = KamiResponsive.isCompactPhone(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 12 : 20,
+        compact ? 8 : 16,
+        compact ? 12 : 20,
+        compact ? 4 : 8,
+      ),
       child: Center(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -254,14 +270,20 @@ class _OnboardingSlide extends StatelessWidget {
                 height: cardHeight,
                 child: Card(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+                    key: ValueKey('onboarding-slide-scroll-${content.title}'),
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 20,
+                      compact ? 8 : 28,
+                      compact ? 12 : 20,
+                      compact ? 8 : 16,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Center(
                           child: Container(
-                            width: 88,
-                            height: 88,
+                            width: compact ? 56 : 88,
+                            height: compact ? 56 : 88,
                             decoration: BoxDecoration(
                               color: Theme.of(
                                 context,
@@ -270,20 +292,22 @@ class _OnboardingSlide extends StatelessWidget {
                             ),
                             child: Icon(
                               content.icon,
-                              size: 46,
+                              size: compact ? 30 : 46,
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: compact ? 10 : 24),
                         Text(
                           content.title,
-                          style: Theme.of(context).textTheme.headlineMedium,
+                          style: compact
+                              ? Theme.of(context).textTheme.titleLarge
+                              : Theme.of(context).textTheme.headlineMedium,
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: compact ? 4 : 12),
                         Text(content.description, textAlign: TextAlign.center),
-                        const SizedBox(height: 24),
+                        SizedBox(height: compact ? 8 : 24),
                         for (final point in content.points)
                           _OnboardingPoint(text: point),
                       ],
@@ -306,9 +330,10 @@ class _OnboardingPoint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = KamiResponsive.isCompactPhone(context);
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.only(bottom: compact ? 4 : 10),
+      padding: EdgeInsets.all(compact ? 6 : 14),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(16),
@@ -318,9 +343,15 @@ class _OnboardingPoint extends StatelessWidget {
           Icon(
             Icons.check_circle_outline,
             color: Theme.of(context).colorScheme.primary,
+            size: compact ? 18 : 24,
           ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(text)),
+          SizedBox(width: compact ? 6 : 12),
+          Expanded(
+            child: Text(
+              text,
+              style: compact ? Theme.of(context).textTheme.bodySmall : null,
+            ),
+          ),
         ],
       ),
     );

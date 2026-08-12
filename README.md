@@ -47,12 +47,14 @@ part of this repository.
 - rear-camera Live Scan using Flutter CameraX, on-demand camera permission,
   direct YUV420-to-RGB frame preprocessing, single-flight throttled inference,
   updating model results, pause/resume, exact frame/result saving to History,
-  direct post-save Add to Batch action, lifecycle cleanup, and recoverable
-  failure states
+  compact post-save `Estimated shelf life: ...` guidance, filled Scan another
+  fruit, outlined Add to Batch/View batch, borderless View in History, automatic
+  History refresh after a new save, lifecycle cleanup, and recoverable failure
+  states
 - deterministic fake classifier/advisor test boundaries with explicit Demo
   labeling
 - low-confidence, rescan-cancel, and flat repeated-rescan navigation behavior
-- Drift/SQLite schema version five for scans, batches, orders, and app settings,
+- Drift/SQLite schema version six for scans, batches, orders, and app settings,
   including composite indexes for filtered keyset pages, remote revisions,
   separate metadata/photo synchronization states, and safe pull cursors
 - repository-level batch/order validation and replaceable providers
@@ -68,7 +70,8 @@ part of this repository.
   deleted, mixed unassigned fruits keep Delete but cannot be added to a batch,
   and same-fruit selections can be assigned to a compatible or newly created
   batch atomically; borderless Select/Cancel text actions, a labeled Delete
-  action, a `0 of N selected` toolbar count, and active-filter chips remain
+  action, a `0 of N selected` toolbar count with scan-card margins, centered
+  lower Cancel/Add to batch/Delete actions, and active-filter chips remain
   above displayed scans and no-match empty states; cards show batch assignment,
   saved date, confidence, and shared ripeness color capsules
 - History filter sheet Newest first/Oldest first sorting
@@ -88,7 +91,12 @@ part of this repository.
   unassigned eligibility filtering
 - Save Result choices for Save to History or Save & Add to Batch; saved-result
   actions use a filled New Scan, outlined Add to Batch/View batch, and
-  text-only View in History hierarchy
+  text-only View in History hierarchy; Live Scan uses the corresponding three
+  actions plus its compact shelf-life summary and refreshes History when the
+  user opens it after saving
+- compact portrait layout support for 360 x 800 logical-pixel phones, with
+  portrait-up orientation lock, viewport-fitted onboarding/auth forms, and
+  scrollable long-content fallbacks
 - offline batch creation, compatible existing/new batch assignment, live
   derived summaries, batch details, scan move/removal, batch rename, eligible
   empty-batch deletion, and confirmed completed-batch deletion with its saved
@@ -118,16 +126,19 @@ part of this repository.
 - top-level saved-scan detail navigation from batch details, avoiding a second
   main-shell navigator
 - optional email/password account creation, sign-in, recovery, password reset,
-  encrypted session restoration, per-account onboarding, and non-enumerating
-  authentication errors when public Supabase configuration is supplied
-- all-or-nothing authenticated claiming of active guest records, with separate
-  draft cloud-photo consent; canceling the claim returns to unchanged Guest mode
+  required editable display names, encrypted session restoration, per-account
+  onboarding, and non-enumerating authentication errors when public Supabase
+  configuration is supplied
+- device-linked, all-or-nothing claiming of active Guest records; a different
+  account never absorbs that device's reserved Guest data, while the linked
+  account claims later Guest records automatically
 - foreground-only, durable metadata synchronization with UUID idempotency,
   revision conflicts, dependency-ordered push, paginated overlapping pull, and
   startup/resume/local-write/refresh/manual-retry triggers
-- private retained-photo upload and lazy retrieval, deterministic object keys,
-  independent image states, consent revocation, and retryable object deletion
-- authenticated Profile sync status and controls, ZIP/JSON/photo export, safe
+- private retained-photo upload and automatic cross-device retrieval,
+  deterministic object keys, independent image states, consent revocation, and
+  retryable object deletion
+- authenticated Profile sync status and controls, safe
   synchronized sign-out with an explicit destructive-discard alternative, and
   password-reauthenticated account deletion
 - version-controlled Supabase migrations, pgTAP tests, private Storage/RLS
@@ -178,9 +189,11 @@ the application documents directory.
 - Completed-order reopen/audit or delivery business rules; local completed
   batch deletion is supported with an explicit saved-scan warning
 - History text search
-- a hosted development Supabase environment and two-device validation; local
-  database, RLS/Storage policy, and lint checks now pass in Docker, but no
-  hosted development project has been linked or deployed yet
+- configured hosted app validation and two-device validation; the T-0123 local
+  database, RLS/Storage policy, and lint checks passed in Docker, and its
+  reviewed initial migration plus authenticated deletion function are deployed
+  to the private Singapore development project. The T-0124 follow-up migration
+  still requires a local reset/pgTAP/lint run and hosted deployment approval.
 
 Missing cloud configuration intentionally leaves the complete Guest workflow
 available. Account and sync controls appear only for an authenticated account.
@@ -216,7 +229,8 @@ npm install
 ```
 
 The exact project-local Supabase CLI is invoked through `npx`. Docker Desktop
-must be running before starting or resetting the local Supabase stack:
+must be running before starting or resetting the local Supabase stack. The
+T-0124 follow-up migration has not yet been applied locally or deployed:
 
 ```powershell
 npx supabase start
@@ -238,6 +252,11 @@ Run the app or build a debug APK:
 flutter run
 flutter build apk --debug --no-pub
 ```
+
+The latest configured T-0124 APK was built at
+`build/app/outputs/flutter-apk/app-debug.apk`, installed successfully, and
+launched on `emulator-5554`. Feature-specific runtime behavior still requires
+manual acceptance testing.
 
 After an intentional Drift schema change, regenerate database code with:
 

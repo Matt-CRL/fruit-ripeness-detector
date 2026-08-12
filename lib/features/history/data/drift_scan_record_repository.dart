@@ -8,20 +8,34 @@ import 'package:kami/core/persistence/persistence_validation.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/scan_record_repository.dart';
 import 'package:kami/features/history/domain/saved_scan_query.dart';
+import 'package:kami/features/auth/application/current_owner_provider.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
 final scanRecordRepositoryProvider = Provider<ScanRecordRepository>((ref) {
-  return DriftScanRecordRepository(ref.watch(appDatabaseProvider));
+  return DriftScanRecordRepository(
+    ref.watch(appDatabaseProvider),
+    ownerId: ref.watch(currentOwnerIdProvider),
+    scopeOwner: true,
+  );
 });
 
 final class DriftScanRecordRepository implements ScanRecordRepository {
-  const DriftScanRecordRepository(this._database);
+  const DriftScanRecordRepository(
+    this._database, {
+    this.ownerId,
+    this.scopeOwner = false,
+  });
 
   final AppDatabase _database;
+  final String? ownerId;
+  final bool scopeOwner;
 
   @override
   Future<void> create(SavedScanRecord record) async {
+    if (scopeOwner && record.ownerId != ownerId) {
+      throw StateError('The scan owner does not match the signed-in account.');
+    }
     await _database.transaction(() async {
       final batchId = record.batchId;
       if (batchId != null) {
@@ -63,7 +77,8 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   @override
   Future<SavedScanRecord?> findActiveById(String id) async {
     final query = _database.select(_database.scanRecords)
-      ..where((table) => table.id.equals(id) & table.deletedAt.isNull());
+      ..where((table) =>
+          table.id.equals(id) & table.deletedAt.isNull() & _ownerPredicate(table));
     final row = await query.getSingleOrNull();
     return row == null ? null : fromRow(row);
   }
@@ -71,7 +86,8 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   @override
   Stream<SavedScanRecord?> watchActiveById(String id) {
     final query = _database.select(_database.scanRecords)
-      ..where((table) => table.id.equals(id) & table.deletedAt.isNull());
+      ..where((table) =>
+          table.id.equals(id) & table.deletedAt.isNull() & _ownerPredicate(table));
     return query.watchSingleOrNull().map(
       (row) => row == null ? null : fromRow(row),
     );
@@ -133,7 +149,10 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
 
     return _database.transaction(() async {
       final scanQuery = _database.select(_database.scanRecords)
-        ..where((table) => table.id.equals(scanId) & table.deletedAt.isNull());
+        ..where((table) =>
+            table.id.equals(scanId) &
+            table.deletedAt.isNull() &
+            _ownerPredicate(table));
       final scan = await scanQuery.getSingleOrNull();
       if (scan == null) {
         throw StateError('The saved scan is no longer available.');
@@ -183,7 +202,10 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
     return _database.transaction(() async {
       final scanQuery = _database.select(_database.scanRecords)
         ..where(
-          (table) => table.id.isIn(ids.toList()) & table.deletedAt.isNull(),
+          (table) =>
+              table.id.isIn(ids.toList()) &
+              table.deletedAt.isNull() &
+              _ownerPredicate(table),
         );
       final scans = await scanQuery.get();
       if (scans.length != ids.length) {
@@ -220,7 +242,7 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
 
   SimpleSelectStatement<$ScanRecordsTable, ScanRecordRow> _activeScansQuery() {
     return _database.select(_database.scanRecords)
-      ..where((table) => table.deletedAt.isNull())
+      ..where((table) => table.deletedAt.isNull() & _ownerPredicate(table))
       ..orderBy([
         (table) => OrderingTerm.desc(table.createdAt),
         (table) => OrderingTerm.desc(table.id),
@@ -267,6 +289,7 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   Expression<bool> _scanPredicates(SavedScanQuery query) {
     final table = _database.scanRecords;
     var predicate = table.deletedAt.isNull();
+    if (scopeOwner) predicate &= _ownerPredicate(table);
     if (query.fruit != null) {
       predicate &= table.fruitType.equals(
         PersistenceCodecs.encodeFruit(query.fruit!),
@@ -297,6 +320,11 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       predicate &= table.createdAt.isSmallerThanValue(query.createdUntilUtc!);
     }
     return predicate;
+  }
+
+  Expression<bool> _ownerPredicate($ScanRecordsTable table) {
+    if (!scopeOwner) return const Constant(true);
+    return ownerId == null ? table.ownerId.isNull() : table.ownerId.equals(ownerId!);
   }
 
   static ScanRecordsCompanion _toCompanion(SavedScanRecord record) {

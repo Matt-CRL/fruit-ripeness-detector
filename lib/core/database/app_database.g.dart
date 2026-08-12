@@ -2684,6 +2684,17 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _consentAccountIdMeta = const VerificationMeta(
+    'consentAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> consentAccountId = GeneratedColumn<String>(
+    'consent_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _imageUploadConsentMeta =
       const VerificationMeta('imageUploadConsent');
   @override
@@ -2783,6 +2794,7 @@ class $AppSettingsTable extends AppSettings
   @override
   List<GeneratedColumn> get $columns => [
     id,
+    consentAccountId,
     imageUploadConsent,
     consentVersion,
     lastSuccessfulSyncAt,
@@ -2806,6 +2818,15 @@ class $AppSettingsTable extends AppSettings
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('consent_account_id')) {
+      context.handle(
+        _consentAccountIdMeta,
+        consentAccountId.isAcceptableOrUnknown(
+          data['consent_account_id']!,
+          _consentAccountIdMeta,
+        ),
+      );
     }
     if (data.containsKey('image_upload_consent')) {
       context.handle(
@@ -2889,6 +2910,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
+      consentAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}consent_account_id'],
+      ),
       imageUploadConsent: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}image_upload_consent'],
@@ -2932,6 +2957,7 @@ class $AppSettingsTable extends AppSettings
 
 class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final int id;
+  final String? consentAccountId;
   final bool? imageUploadConsent;
   final String? consentVersion;
   final DateTime? lastSuccessfulSyncAt;
@@ -2942,6 +2968,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final int remoteRevision;
   const AppSettingsRow({
     required this.id,
+    this.consentAccountId,
     this.imageUploadConsent,
     this.consentVersion,
     this.lastSuccessfulSyncAt,
@@ -2955,6 +2982,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || consentAccountId != null) {
+      map['consent_account_id'] = Variable<String>(consentAccountId);
+    }
     if (!nullToAbsent || imageUploadConsent != null) {
       map['image_upload_consent'] = Variable<bool>(imageUploadConsent);
     }
@@ -2981,6 +3011,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   AppSettingsCompanion toCompanion(bool nullToAbsent) {
     return AppSettingsCompanion(
       id: Value(id),
+      consentAccountId: consentAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(consentAccountId),
       imageUploadConsent: imageUploadConsent == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUploadConsent),
@@ -3011,6 +3044,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return AppSettingsRow(
       id: serializer.fromJson<int>(json['id']),
+      consentAccountId: serializer.fromJson<String?>(json['consentAccountId']),
       imageUploadConsent: serializer.fromJson<bool?>(
         json['imageUploadConsent'],
       ),
@@ -3034,6 +3068,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'consentAccountId': serializer.toJson<String?>(consentAccountId),
       'imageUploadConsent': serializer.toJson<bool?>(imageUploadConsent),
       'consentVersion': serializer.toJson<String?>(consentVersion),
       'lastSuccessfulSyncAt': serializer.toJson<DateTime?>(
@@ -3049,6 +3084,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
 
   AppSettingsRow copyWith({
     int? id,
+    Value<String?> consentAccountId = const Value.absent(),
     Value<bool?> imageUploadConsent = const Value.absent(),
     Value<String?> consentVersion = const Value.absent(),
     Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -3059,6 +3095,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     int? remoteRevision,
   }) => AppSettingsRow(
     id: id ?? this.id,
+    consentAccountId: consentAccountId.present
+        ? consentAccountId.value
+        : this.consentAccountId,
     imageUploadConsent: imageUploadConsent.present
         ? imageUploadConsent.value
         : this.imageUploadConsent,
@@ -3081,6 +3120,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
     return AppSettingsRow(
       id: data.id.present ? data.id.value : this.id,
+      consentAccountId: data.consentAccountId.present
+          ? data.consentAccountId.value
+          : this.consentAccountId,
       imageUploadConsent: data.imageUploadConsent.present
           ? data.imageUploadConsent.value
           : this.imageUploadConsent,
@@ -3110,6 +3152,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   String toString() {
     return (StringBuffer('AppSettingsRow(')
           ..write('id: $id, ')
+          ..write('consentAccountId: $consentAccountId, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
           ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
@@ -3125,6 +3168,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   @override
   int get hashCode => Object.hash(
     id,
+    consentAccountId,
     imageUploadConsent,
     consentVersion,
     lastSuccessfulSyncAt,
@@ -3139,6 +3183,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
       identical(this, other) ||
       (other is AppSettingsRow &&
           other.id == this.id &&
+          other.consentAccountId == this.consentAccountId &&
           other.imageUploadConsent == this.imageUploadConsent &&
           other.consentVersion == this.consentVersion &&
           other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt &&
@@ -3151,6 +3196,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
 
 class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<int> id;
+  final Value<String?> consentAccountId;
   final Value<bool?> imageUploadConsent;
   final Value<String?> consentVersion;
   final Value<DateTime?> lastSuccessfulSyncAt;
@@ -3161,6 +3207,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<int> remoteRevision;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
+    this.consentAccountId = const Value.absent(),
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
@@ -3172,6 +3219,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
+    this.consentAccountId = const Value.absent(),
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
@@ -3183,6 +3231,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   });
   static Insertable<AppSettingsRow> custom({
     Expression<int>? id,
+    Expression<String>? consentAccountId,
     Expression<bool>? imageUploadConsent,
     Expression<String>? consentVersion,
     Expression<DateTime>? lastSuccessfulSyncAt,
@@ -3194,6 +3243,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (consentAccountId != null) 'consent_account_id': consentAccountId,
       if (imageUploadConsent != null)
         'image_upload_consent': imageUploadConsent,
       if (consentVersion != null) 'consent_version': consentVersion,
@@ -3209,6 +3259,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
 
   AppSettingsCompanion copyWith({
     Value<int>? id,
+    Value<String?>? consentAccountId,
     Value<bool?>? imageUploadConsent,
     Value<String?>? consentVersion,
     Value<DateTime?>? lastSuccessfulSyncAt,
@@ -3220,6 +3271,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
+      consentAccountId: consentAccountId ?? this.consentAccountId,
       imageUploadConsent: imageUploadConsent ?? this.imageUploadConsent,
       consentVersion: consentVersion ?? this.consentVersion,
       lastSuccessfulSyncAt: lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
@@ -3236,6 +3288,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (consentAccountId.present) {
+      map['consent_account_id'] = Variable<String>(consentAccountId.value);
     }
     if (imageUploadConsent.present) {
       map['image_upload_consent'] = Variable<bool>(imageUploadConsent.value);
@@ -3270,6 +3325,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   String toString() {
     return (StringBuffer('AppSettingsCompanion(')
           ..write('id: $id, ')
+          ..write('consentAccountId: $consentAccountId, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
           ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
@@ -4980,6 +5036,7 @@ typedef $$OrdersTableProcessedTableManager =
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
+      Value<String?> consentAccountId,
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
@@ -4992,6 +5049,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
+      Value<String?> consentAccountId,
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
@@ -5013,6 +5071,11 @@ class $$AppSettingsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get consentAccountId => $composableBuilder(
+    column: $table.consentAccountId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5071,6 +5134,11 @@ class $$AppSettingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get consentAccountId => $composableBuilder(
+    column: $table.consentAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get imageUploadConsent => $composableBuilder(
     column: $table.imageUploadConsent,
     builder: (column) => ColumnOrderings(column),
@@ -5123,6 +5191,11 @@ class $$AppSettingsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get consentAccountId => $composableBuilder(
+    column: $table.consentAccountId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get imageUploadConsent => $composableBuilder(
     column: $table.imageUploadConsent,
@@ -5195,6 +5268,7 @@ class $$AppSettingsTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> consentAccountId = const Value.absent(),
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -5205,6 +5279,7 @@ class $$AppSettingsTableTableManager
                 Value<int> remoteRevision = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
+                consentAccountId: consentAccountId,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
@@ -5217,6 +5292,7 @@ class $$AppSettingsTableTableManager
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> consentAccountId = const Value.absent(),
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -5227,6 +5303,7 @@ class $$AppSettingsTableTableManager
                 Value<int> remoteRevision = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
+                consentAccountId: consentAccountId,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,

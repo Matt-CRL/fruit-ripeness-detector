@@ -69,6 +69,7 @@ final class CreateOrderUseCase {
   }) async {
     final fields = _validate(customerName, deliveryAddress);
     final now = _utcNow();
+    _validateDeliveryDate(deliveryDate, now);
     final order = BatchOrder(
       id: _idGenerator.nextId(),
       ownerId: _ownerId,
@@ -109,6 +110,8 @@ final class UpdatePendingOrderUseCase {
     required DateTime deliveryDate,
   }) async {
     final fields = _validate(customerName, deliveryAddress);
+    final now = _utcNow();
+    _validateDeliveryDate(deliveryDate, now);
     final updated = BatchOrder(
       id: existing.id,
       ownerId: existing.ownerId,
@@ -118,7 +121,7 @@ final class UpdatePendingOrderUseCase {
       deliveryDate: deliveryDate.toUtc(),
       status: BatchOrderStatus.pending,
       createdAt: existing.createdAt,
-      updatedAt: _utcNow(),
+      updatedAt: now,
       deletedAt: existing.deletedAt,
       syncState: existing.syncState,
       remoteRevision: existing.remoteRevision,
@@ -193,6 +196,21 @@ final class CancelPendingOrderUseCase {
     );
   }
   return (customerName: name, deliveryAddress: address);
+}
+
+void _validateDeliveryDate(DateTime deliveryDate, DateTime now) {
+  final selected = _dateOnlyUtc(deliveryDate);
+  final today = _dateOnlyUtc(now);
+  if (selected.isBefore(today)) {
+    throw const OrderActionException(
+      'Delivery date cannot be earlier than today.',
+    );
+  }
+}
+
+DateTime _dateOnlyUtc(DateTime value) {
+  final utc = value.toUtc();
+  return DateTime.utc(utc.year, utc.month, utc.day);
 }
 
 final class OrderActionException implements Exception {

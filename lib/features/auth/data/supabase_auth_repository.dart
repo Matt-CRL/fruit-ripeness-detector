@@ -18,11 +18,13 @@ final class SupabaseAuthRepository implements AuthRepository {
   Future<AccountSignUpResult> createAccount({
     required String email,
     required String password,
+    required String displayName,
   }) async {
     try {
       final response = await _client.auth.signUp(
         email: email.trim(),
         password: password,
+        data: <String, dynamic>{'display_name': displayName.trim()},
         emailRedirectTo: callbackUrl,
       );
       final user = _mapUser(response.user);
@@ -42,6 +44,30 @@ final class SupabaseAuthRepository implements AuthRepository {
     } on Object {
       throw const AccountAuthException(
         'Account creation could not be completed. Check your connection and try again.',
+      );
+    }
+  }
+
+  @override
+  Future<AccountUser> updateDisplayName(String displayName) async {
+    try {
+      final response = await _client.auth.updateUser(
+        UserAttributes(data: <String, dynamic>{'display_name': displayName.trim()}),
+      );
+      final user = _mapUser(response.user);
+      if (user == null) {
+        throw const AccountAuthException(
+          'The display name could not be updated. Please try again.',
+        );
+      }
+      return user;
+    } on AccountAuthException {
+      rethrow;
+    } on AuthException catch (error) {
+      throw AccountAuthException(_safeMessage(error));
+    } on Object {
+      throw const AccountAuthException(
+        'The display name could not be updated. Check your connection and try again.',
       );
     }
   }
@@ -148,7 +174,11 @@ final class SupabaseAuthRepository implements AuthRepository {
   static AccountUser? _mapUser(User? user) {
     final email = user?.email?.trim();
     if (user == null || email == null || email.isEmpty) return null;
-    return AccountUser(id: user.id, email: email);
+    final rawDisplayName = user.userMetadata?['display_name'];
+    final displayName = rawDisplayName is String && rawDisplayName.trim().isNotEmpty
+        ? rawDisplayName.trim()
+        : null;
+    return AccountUser(id: user.id, email: email, displayName: displayName);
   }
 
   static String _safeMessage(AuthException error) {
@@ -176,7 +206,12 @@ final class UnavailableAuthRepository implements AuthRepository {
   Future<AccountSignUpResult> createAccount({
     required String email,
     required String password,
+    required String displayName,
   }) => Future.error(_unavailable);
+
+  @override
+  Future<AccountUser> updateDisplayName(String displayName) =>
+      Future.error(_unavailable);
 
   @override
   Future<void> reauthenticate(String password) => Future.error(_unavailable);

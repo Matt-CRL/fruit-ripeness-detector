@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/app/kami_app.dart';
 import 'package:kami/app/theme/theme_mode_controller.dart';
@@ -12,6 +13,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.portraitUp,
+  ]);
 
   final preferences = StartupPreferencesRepository.device();
   final appConfig = AppConfig.fromEnvironment();

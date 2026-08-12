@@ -147,7 +147,18 @@ void main() {
       expect(records.single.ripeness, RipenessStage.ripe);
       expect(records.single.modelConfidence, 0.82);
       expect(records.single.resultOrigin, ResultOrigin.onDeviceModel);
-      expect(find.text('Saved to History'), findsOneWidget);
+      expect(find.text('Saved to History'), findsNothing);
+      expect(find.text('Scan another fruit'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Add to Batch'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextButton, 'View in History'),
+        findsOneWidget,
+      );
+      expect(find.text('Estimated shelf life: 1-3 days'), findsOneWidget);
+      expect(find.textContaining('Storage:'), findsOneWidget);
       expect(find.text('Result saved'), findsNothing);
       expect(find.text('Would you like to add it to a batch?'), findsNothing);
 
@@ -213,7 +224,7 @@ void main() {
     await tester.tap(find.text('Save Result'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Saved to History'), findsOneWidget);
+    expect(find.text('Saved to History'), findsNothing);
     expect(find.text('Result saved'), findsNothing);
     expect(await repository.listActive(), hasLength(1));
     expect(classifier.callCount, 1);

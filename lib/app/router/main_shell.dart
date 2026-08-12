@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 
 const _mainNavigationPillHeight = 76.0;
 const _mainNavigationBottomMargin = 12.0;
@@ -107,6 +108,7 @@ class _NavigationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+    final compact = KamiResponsive.isCompactPhone(context);
 
     return Expanded(
       child: Semantics(
@@ -119,19 +121,23 @@ class _NavigationItem extends StatelessWidget {
           splashFactory: NoSplash.splashFactory,
           child: ExcludeSemantics(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(selected ? selectedIcon : icon, color: color, size: 25),
-                  const SizedBox(height: 5),
+                  Icon(
+                    selected ? selectedIcon : icon,
+                    color: color,
+                    size: compact ? 22 : 25,
+                  ),
+                  SizedBox(height: compact ? 3 : 5),
                   Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.fade,
                     style: TextStyle(
                       color: color,
-                      fontSize: 12,
+                      fontSize: compact ? 11 : 12,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                     ),
                   ),
@@ -166,9 +172,9 @@ class _CenterScanButton extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onTap,
-              child: const SizedBox(
-                width: 60,
-                height: 46,
+                child: const SizedBox(
+                  width: 60,
+                  height: 48,
                 child: ExcludeSemantics(
                   child: Icon(
                     Icons.document_scanner_outlined,

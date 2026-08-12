@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/router/main_shell.dart';
-import 'package:kami/core/persistence/image_sync_state.dart';
-import 'package:kami/core/persistence/local_sync_state.dart';
 import 'package:kami/features/batches/application/batch_actions.dart';
 import 'package:kami/features/batches/presentation/batch_providers.dart';
 import 'package:kami/features/history/application/delete_saved_scan.dart';
@@ -18,7 +16,6 @@ import 'package:kami/features/scan/domain/scan_models.dart';
 import 'package:kami/features/scan/presentation/model_confidence_indicator.dart';
 import 'package:kami/features/scan/presentation/ripeness_stage_style.dart';
 import 'package:kami/features/scan/presentation/shelf_life_guidance_card.dart';
-import 'package:kami/features/sync/application/sync_coordinator.dart';
 
 class SavedScanDetailScreen extends ConsumerWidget {
   const SavedScanDetailScreen({
@@ -62,7 +59,7 @@ class SavedScanDetailScreen extends ConsumerWidget {
   }
 }
 
-class _SavedScanDetails extends ConsumerWidget {
+class _SavedScanDetails extends StatelessWidget {
   const _SavedScanDetails({
     required this.record,
     required this.openedFromHistory,
@@ -76,7 +73,7 @@ class _SavedScanDetails extends ConsumerWidget {
   final bool openedFromBatchScans;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final confidence = (record.modelConfidence * 100).round();
     final style = ripenessStageStyle(
       record.ripeness,
@@ -108,47 +105,6 @@ class _SavedScanDetails extends ConsumerWidget {
                     ),
                   ),
                 ),
-                if (record.ownerId != null) ...[
-                  const SizedBox(height: 12),
-                  Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Account synchronization',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Metadata: ${_metadataSyncLabel(record.syncState)}',
-                          ),
-                          Text(
-                            'Photo: ${_photoSyncLabel(record.imageSyncState)}',
-                          ),
-                          if (record.imageSyncState ==
-                              ImageSyncState.remoteOnly) ...[
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                await ref
-                                    .read(syncCoordinatorProvider)
-                                    .downloadRemoteImage(record.id);
-                                ref.invalidate(
-                                  savedScanRecordProvider(record.id),
-                                );
-                              },
-                              icon: const Icon(Icons.cloud_download_outlined),
-                              label: const Text('Download photo'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
                 if (record.resultOrigin == ResultOrigin.demo) ...[
                   const SizedBox(height: 12),
                   const _SavedDemoNotice(),
@@ -261,23 +217,6 @@ class _SavedScanDetails extends ConsumerWidget {
     );
   }
 }
-
-String _metadataSyncLabel(LocalSyncState state) => switch (state) {
-  LocalSyncState.localOnly => 'only on this device',
-  LocalSyncState.pending => 'pending',
-  LocalSyncState.syncing => 'syncing',
-  LocalSyncState.synchronized => 'up to date',
-  LocalSyncState.failed => 'failed — retry from Profile',
-};
-
-String _photoSyncLabel(ImageSyncState state) => switch (state) {
-  ImageSyncState.localOnly => 'only on this device',
-  ImageSyncState.pendingUpload => 'pending upload',
-  ImageSyncState.uploading => 'uploading',
-  ImageSyncState.synchronized => 'up to date',
-  ImageSyncState.remoteOnly => 'available to download',
-  ImageSyncState.failed => 'failed — retry from Profile',
-};
 
 class _SavedScanManagementActions extends ConsumerStatefulWidget {
   const _SavedScanManagementActions({

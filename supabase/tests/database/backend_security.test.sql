@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(20);
 
 insert into auth.users (
   id,
@@ -248,6 +248,46 @@ select lives_ok(
     )
   $$,
   'an order can be created only for a nonempty batch'
+);
+
+select lives_ok(
+  $$
+    update public.scan_records
+    set remote_image_key =
+      '11111111-1111-4111-8111-111111111111/cccccccc-cccc-4ccc-8ccc-cccccccccccc/history.jpg'
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'completed-batch scans permit deterministic photo-key attachment'
+);
+
+select lives_ok(
+  $$
+    update public.scan_records
+    set remote_image_key = null
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'completed-batch scans permit deterministic photo-key clearing'
+);
+
+select throws_ok(
+  $$
+    update public.scan_records
+    set ripeness_stage = 'overripe', updated_at = '2026-08-10T00:03:00Z'
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'P0001',
+  'completed_batch_locked',
+  'completed batches still reject assessment edits'
+);
+
+select throws_ok(
+  $$
+    update public.scan_records
+    set batch_id = null, updated_at = '2026-08-10T00:03:00Z'
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'P0001',
+  'completed batches still reject scan movement'
 );
 
 select throws_ok(

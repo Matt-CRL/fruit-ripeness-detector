@@ -116,6 +116,31 @@ void main() {
       PersistenceCodecs.encodeImageSyncState(ImageSyncState.localOnly),
     );
   });
+
+  test('photo consent is only reusable by the account that chose it', () async {
+    await sync.setImageUploadConsent(
+      ownerId: _ownerId,
+      consent: true,
+      authenticated: true,
+    );
+
+    expect(await sync.photoConsentForAccount(_ownerId), isTrue);
+    expect(
+      await sync.photoConsentForAccount('ffffffff-ffff-4fff-8fff-ffffffffffff'),
+      isNull,
+    );
+
+    await sync.setImageUploadConsent(
+      ownerId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      consent: false,
+      authenticated: true,
+    );
+    expect(await sync.photoConsentForAccount(_ownerId), isNull);
+    expect(
+      await sync.photoConsentForAccount('ffffffff-ffff-4fff-8fff-ffffffffffff'),
+      isFalse,
+    );
+  });
 }
 
 SavedScanRecord _scan(String id, {String? batchId}) {

@@ -60,11 +60,16 @@ final class SyncStatusController extends Notifier<SyncStatusSnapshot> {
       lastSuccessfulSyncAt: at,
       clearErrorCode: true,
       conflictCount: conflicts,
+      failureCategory: SyncFailureCategory.none,
     );
   }
 
-  void setFailure(String code) {
-    state = state.copyWith(status: SyncStatus.failed, errorCode: code);
+  void setFailure(String code, SyncFailureCategory category) {
+    state = state.copyWith(
+      status: SyncStatus.failed,
+      errorCode: code,
+      failureCategory: category,
+    );
   }
 }
 
@@ -124,6 +129,7 @@ final class SyncCoordinator {
       );
       pushed += settingsPush.accepted;
       conflicts += settingsPush.conflicts;
+      recoverableFailures += settingsPush.failures;
 
       final deletionOrder = [
         SyncTable.orders,
@@ -139,6 +145,7 @@ final class SyncCoordinator {
         );
         pushed += outcome.accepted;
         conflicts += outcome.conflicts;
+        recoverableFailures += outcome.failures;
       }
 
       for (final table in [SyncTable.batches, SyncTable.scanRecords]) {
@@ -150,6 +157,7 @@ final class SyncCoordinator {
         );
         pushed += outcome.accepted;
         conflicts += outcome.conflicts;
+        recoverableFailures += outcome.failures;
       }
 
       final pendingOrders = await _pushTable(
@@ -162,6 +170,7 @@ final class SyncCoordinator {
       );
       pushed += pendingOrders.accepted;
       conflicts += pendingOrders.conflicts;
+      recoverableFailures += pendingOrders.failures;
       final completedOrders = await _pushTable(
         gateway,
         userId,
@@ -172,6 +181,7 @@ final class SyncCoordinator {
       );
       pushed += completedOrders.accepted;
       conflicts += completedOrders.conflicts;
+      recoverableFailures += completedOrders.failures;
 
       final localSettings = await _local.readSettings();
       if (localSettings.imageUploadConsent == true) {
@@ -229,8 +239,11 @@ final class SyncCoordinator {
         conflicts += revokeOutcome.conflicts;
         recoverableFailures += revokeOutcome.failures;
       }
+      if (pulledSettings.imageUploadConsent == true) {
+        recoverableFailures += await _downloadMissingImages(userId);
+      }
       if (recoverableFailures > 0) {
-        throw StateError('Retryable synchronization work remains.');
+        throw const _SyncFailure(SyncFailureCategory.record);
       }
 
       final completedAt = DateTime.now().toUtc();
@@ -243,17 +256,31 @@ final class SyncCoordinator {
         conflicts: conflicts,
         completedAt: completedAt,
       );
-    } on Object {
+    } on _SyncFailure catch (error) {
       const errorCode = 'sync_failed';
       final failedAt = DateTime.now().toUtc();
       await _local.recordFailure(at: failedAt, errorCode: errorCode);
-      _status.setFailure(errorCode);
+      _status.setFailure(errorCode, error.category);
       return SyncRunResult(
         status: SyncStatus.failed,
         pushed: pushed,
         pulled: pulled,
         conflicts: conflicts,
         errorCode: errorCode,
+        failureCategory: error.category,
+      );
+    } on Object {
+      const errorCode = 'sync_failed';
+      final failedAt = DateTime.now().toUtc();
+      await _local.recordFailure(at: failedAt, errorCode: errorCode);
+      _status.setFailure(errorCode, SyncFailureCategory.connection);
+      return SyncRunResult(
+        status: SyncStatus.failed,
+        pushed: pushed,
+        pulled: pulled,
+        conflicts: conflicts,
+        errorCode: errorCode,
+        failureCategory: SyncFailureCategory.connection,
       );
     }
   }
@@ -266,14 +293,23 @@ final class SyncCoordinator {
   }) async {
     var accepted = 0;
     var conflicts = 0;
+    var failures = 0;
     final records = await _local.pendingRecords(table, userId);
     for (final record in records) {
       if (include != null && !include(record)) continue;
-      final outcome = await _pushOne(gateway, record);
-      accepted += outcome.accepted;
-      conflicts += outcome.conflicts;
+      try {
+        final outcome = await _pushOne(gateway, record);
+        accepted += outcome.accepted;
+        conflicts += outcome.conflicts;
+      } on Object {
+        failures++;
+      }
     }
-    return _PushOutcome(accepted: accepted, conflicts: conflicts);
+    return _PushOutcome(
+      accepted: accepted,
+      conflicts: conflicts,
+      failures: failures,
+    );
   }
 
   Future<_PushOutcome> _pushOne(
@@ -496,6 +532,16 @@ final class SyncCoordinator {
     }
   }
 
+  Future<int> _downloadMissingImages(String userId) async {
+    var failures = 0;
+    final scans = await _local.remoteOnlyScans(userId);
+    for (final scan in scans) {
+      final path = await downloadRemoteImage(scan.id);
+      if (path == null) failures++;
+    }
+    return failures;
+  }
+
   Future<void> deleteRemoteAccount() async {
     final gateway = _gateway;
     if (gateway == null || _userId == null) {
@@ -515,4 +561,10 @@ final class _PushOutcome {
   final int accepted;
   final int conflicts;
   final int failures;
+}
+
+final class _SyncFailure implements Exception {
+  const _SyncFailure(this.category);
+
+  final SyncFailureCategory category;
 }

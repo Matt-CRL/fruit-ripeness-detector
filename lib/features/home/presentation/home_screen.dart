@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/router/main_shell.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -30,11 +31,10 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          8,
-          20,
-          36 + mainNavigationContentBottomInset(context),
+        padding: KamiResponsive.pagePadding(
+          context,
+          top: 8,
+          bottom: 36 + mainNavigationContentBottomInset(context),
         ),
         children: [
           Center(

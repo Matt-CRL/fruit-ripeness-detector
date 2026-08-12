@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/router/main_shell.dart';
+import 'package:kami/app/theme/app_colors.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/core/widgets/feature_empty_state_card.dart';
 import 'package:kami/features/batches/presentation/batch_providers.dart';
 import 'package:kami/features/history/application/delete_saved_scan.dart';
@@ -286,7 +288,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               child: _historyBounded(
                 context,
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  padding: EdgeInsets.fromLTRB(
+                    KamiResponsive.value(context, regular: 20, compact: 12),
+                    8,
+                    KamiResponsive.value(context, regular: 20, compact: 12),
+                    20,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -298,9 +305,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       Text(
                         'Saved scans stay available on this device, even when '
                         'you are offline.',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                        style: const TextStyle(color: AppColors.secondaryText),
                       ),
                       if (!_isSelecting) ...[
                         const SizedBox(height: 12),
@@ -330,7 +335,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               ),
             ),
             if (_isLoading)
-              const SliverToBoxAdapter(child: _HistoryLoading())
+              SliverToBoxAdapter(
+                child: _historyBounded(
+                  context,
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
+                      ),
+                    ),
+                    child: _HistoryLoading(),
+                  ),
+                ),
+              )
             else if (_loadError != null)
               SliverToBoxAdapter(
                 child: _historyBounded(
@@ -342,13 +361,22 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               SliverToBoxAdapter(
                 child: _historyBounded(
                   context,
-                  const FeatureEmptyStateCard(
-                    icon: Icons.history_outlined,
-                    title: 'No saved scans yet',
-                    message:
-                        'Save a result after choosing a fruit photo and it '
-                        'will appear here.',
-                    statusLabel: 'Ready offline',
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
+                      ),
+                    ),
+                    child: FeatureEmptyStateCard(
+                      icon: Icons.history_outlined,
+                      title: 'No saved scans yet',
+                      message:
+                          'Save a result after choosing a fruit photo and it '
+                          'will appear here.',
+                      statusLabel: 'Ready offline',
+                    ),
                   ),
                 ),
               )
@@ -356,23 +384,32 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               SliverToBoxAdapter(
                 child: _historyBounded(
                   context,
-                  Column(
-                    children: [
-                      _HistoryActiveFilterTags(filters: _filters),
-                      const SizedBox(height: 12),
-                      FeatureEmptyStateCard(
-                        icon: Icons.filter_alt_off_outlined,
-                        title: 'No scans match these filters',
-                        message:
-                            'Try adjusting the filters or clear them to see '
-                            'all saved scans.',
-                        action: OutlinedButton.icon(
-                          onPressed: _clearFilters,
-                          icon: const Icon(Icons.clear_all),
-                          label: const Text('Clear filters'),
-                        ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
                       ),
-                    ],
+                    ),
+                    child: Column(
+                      children: [
+                        _HistoryActiveFilterTags(filters: _filters),
+                        const SizedBox(height: 12),
+                        FeatureEmptyStateCard(
+                          icon: Icons.filter_alt_off_outlined,
+                          title: 'No scans match these filters',
+                          message:
+                              'Try adjusting the filters or clear them to see '
+                              'all saved scans.',
+                          action: OutlinedButton.icon(
+                            onPressed: _clearFilters,
+                            icon: const Icon(Icons.clear_all),
+                            label: const Text('Clear filters'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -382,7 +419,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   child: _historyBounded(
                     context,
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      padding: EdgeInsets.fromLTRB(
+                        KamiResponsive.value(
+                          context,
+                          regular: 20,
+                          compact: 12,
+                        ),
+                        0,
+                        KamiResponsive.value(
+                          context,
+                          regular: 20,
+                          compact: 12,
+                        ),
+                        12,
+                      ),
                       child: _HistoryActiveFilterTags(filters: _filters),
                     ),
                   ),
@@ -427,7 +477,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   return _historyBounded(
                     context,
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
+                      ),
+                      0,
+                      KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
+                      ),
+                      12,
+                    ),
                       child: _HistoryScanCard(
                         record: record,
                         batchName: record.batchId == null
@@ -709,7 +772,12 @@ class _HistoryFilterSheetState extends State<_HistoryFilterSheet> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomInset),
+        padding: EdgeInsets.fromLTRB(
+          KamiResponsive.value(context, regular: 20, compact: 12),
+          16,
+          KamiResponsive.value(context, regular: 20, compact: 12),
+          20 + bottomInset,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -907,8 +975,19 @@ class _HistorySelectionToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final horizontalPadding = KamiResponsive.value(
+      context,
+      regular: 20,
+      compact: 12,
+    );
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        0,
+        horizontalPadding,
+        12,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -932,7 +1011,8 @@ class _HistorySelectionToolbar extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Wrap(
-            alignment: WrapAlignment.end,
+            alignment: WrapAlignment.center,
+            runAlignment: WrapAlignment.center,
             spacing: 4,
             children: [
               TextButton.icon(

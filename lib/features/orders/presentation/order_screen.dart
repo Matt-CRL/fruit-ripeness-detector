@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/app/theme/app_colors.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/batches/presentation/batch_providers.dart';
 import 'package:kami/features/orders/application/order_actions.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
@@ -92,13 +93,13 @@ class _OrderEditorState extends ConsumerState<_OrderEditor> {
     _addressController = TextEditingController(
       text: order?.deliveryAddress ?? '',
     );
-    _deliveryDate =
-        order?.deliveryDate ??
-        DateTime.utc(
-          DateTime.now().year,
-          DateTime.now().month,
-          DateTime.now().day,
-        );
+    final today = _todayUtc();
+    final savedDate = order?.deliveryDate;
+    final initialDate = savedDate == null ? today : _dateOnlyUtc(savedDate);
+    _deliveryDate = order?.status == BatchOrderStatus.completed ||
+            !initialDate.isBefore(today)
+        ? initialDate
+        : today;
   }
 
   @override
@@ -109,23 +110,35 @@ class _OrderEditorState extends ConsumerState<_OrderEditor> {
   }
 
   Future<void> _chooseDate() async {
-    final current = _deliveryDate.toLocal();
+    final today = _todayUtc();
+    final current = (_deliveryDate.isBefore(today) ? today : _deliveryDate)
+        .toLocal();
+    final lastDate = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).add(const Duration(days: 3650));
     final selected = await showDatePicker(
       context: context,
       initialDate: current,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      firstDate: DateTime(today.year, today.month, today.day),
+      lastDate: lastDate,
       helpText: 'Delivery date',
+      fieldHintText: 'Today or later',
     );
     if (selected != null && mounted) {
-      setState(
-        () => _deliveryDate = DateTime.utc(
-          selected.year,
-          selected.month,
-          selected.day,
-        ),
-      );
+      setState(() => _deliveryDate = _dateOnlyUtc(selected));
     }
+  }
+
+  DateTime _todayUtc() {
+    final now = DateTime.now();
+    return DateTime.utc(now.year, now.month, now.day);
+  }
+
+  DateTime _dateOnlyUtc(DateTime value) {
+    final local = value.toLocal();
+    return DateTime.utc(local.year, local.month, local.day);
   }
 
   Future<void> _save() async {
@@ -221,7 +234,7 @@ class _OrderEditorState extends ConsumerState<_OrderEditor> {
   Widget build(BuildContext context) {
     final order = widget.order;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+      padding: KamiResponsive.pagePadding(context, top: 8, bottom: 36),
       children: [
         Center(
           child: ConstrainedBox(

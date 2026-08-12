@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
+import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
+import 'package:kami/features/auth/data/device_account_link_store.dart';
 import 'package:kami/features/auth/domain/auth_repository.dart';
+import 'package:kami/features/auth/presentation/development_photo_consent_dialog.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 import 'package:kami/features/sync/application/sync_coordinator.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
@@ -14,47 +17,30 @@ import 'package:kami/features/sync/domain/sync_models.dart';
 Future<void> _openAfterAuthentication(
   BuildContext context,
   WidgetRef ref,
-  AccountUser user,
-) async {
+  AccountUser user, {
+    bool createdAccount = false,
+    bool transferApproved = false,
+  }) async {
   final localSync = ref.read(localSyncStoreProvider);
   final hasGuestData = await localSync.hasActiveGuestData();
+  final linkStore = ref.read(deviceAccountLinkStoreProvider);
+  final linkedAccountId = await linkStore.readLinkedAccountId();
   if (!context.mounted) return;
 
-  if (hasGuestData) {
-    final transfer = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Transfer guest data?'),
-        content: const Text(
-          'Kami found scans, batches, or orders saved in guest mode. Transfer '
-          'all active guest data to this account to continue. Nothing is '
-          'uploaded until the transfer succeeds.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel and sign out'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Transfer all and continue'),
-          ),
-        ],
-      ),
-    );
-    if (transfer != true) {
-      await ref.read(authRepositoryProvider).signOut(localOnly: true);
-      if (context.mounted) context.go(AppRoutes.accountChoice);
-      return;
-    }
+  final shouldClaim = hasGuestData &&
+      (linkedAccountId == user.id ||
+          (createdAccount && linkedAccountId == null && transferApproved));
+
+  if (createdAccount && linkedAccountId == null) {
+    // Establish the link before claiming so a transient failure can be retried
+    // automatically when this same account signs in again on this device.
+    await linkStore.writeLinkedAccountId(user.id);
   }
 
-  final existingSettings = await localSync.readSettings();
-  var photoConsent = existingSettings.imageUploadConsent;
+  var photoConsent = await localSync.photoConsentForAccount(user.id);
   if (photoConsent == null) {
     if (!context.mounted) return;
-    photoConsent = await _requestDevelopmentPhotoConsent(context);
+    photoConsent = await requestDevelopmentPhotoConsent(context);
     if (photoConsent == null) {
       await ref.read(authRepositoryProvider).signOut(localOnly: true);
       if (context.mounted) context.go(AppRoutes.accountChoice);
@@ -63,7 +49,7 @@ Future<void> _openAfterAuthentication(
   }
 
   try {
-    if (hasGuestData) {
+    if (shouldClaim) {
       await localSync.claimGuestData(
         ownerId: user.id,
         imageUploadConsent: photoConsent,
@@ -71,6 +57,7 @@ Future<void> _openAfterAuthentication(
     } else {
       await localSync.purgeGuestTombstones();
       await localSync.setImageUploadConsent(
+        ownerId: user.id,
         consent: photoConsent,
         authenticated: true,
       );
@@ -98,6 +85,14 @@ Future<void> _openAfterAuthentication(
     return;
   }
 
+  if (shouldClaim && hasGuestData && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Local guest data was added to this account.'),
+      ),
+    );
+  }
+
   final completed = await ref
       .read(startupPreferencesProvider)
       .isAccountOnboardingCompleted(user.id);
@@ -105,40 +100,6 @@ Future<void> _openAfterAuthentication(
     context.go(completed ? AppRoutes.home : AppRoutes.onboarding);
   }
   unawaited(ref.read(syncCoordinatorProvider).syncNow(SyncTrigger.signIn));
-}
-
-Future<bool?> _requestDevelopmentPhotoConsent(BuildContext context) {
-  return showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Cloud photo backup'),
-      content: const SingleChildScrollView(
-        child: Text(
-          'Development privacy notice (draft v1)\n\n'
-          'Kami synchronizes scan metadata, batches, orders, and account '
-          'settings so your account can work across devices. If you allow '
-          'photo backup, Kami also stores the compressed, metadata-stripped '
-          'JPEG retained in History. Photos are private to your account.\n\n'
-          'You can withdraw photo consent later. Withdrawal removes uploaded '
-          'photos while keeping local copies and metadata synchronization. '
-          'Account tools will provide export and deletion. This wording is '
-          'for development and still requires authorized review before thesis '
-          'release.',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Metadata only'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Allow photo backup'),
-        ),
-      ],
-    ),
-  );
 }
 
 String? _validateEmail(String? value) {
@@ -152,13 +113,67 @@ String? _validateEmail(String? value) {
 
 String? _validatePassword(String? value) {
   final password = value ?? '';
-  if (password.length < 8 ||
-      !password.contains(RegExp('[a-z]')) ||
-      !password.contains(RegExp('[A-Z]')) ||
-      !password.contains(RegExp('[0-9]'))) {
-    return 'Use 8+ characters with uppercase, lowercase, and a number.';
+  if (!_hasMinimumPasswordLength(password) ||
+      !_hasLowercase(password) ||
+      !_hasUppercase(password) ||
+      !_hasNumber(password)) {
+    return 'Password does not meet the requirements.';
   }
   return null;
+}
+
+bool _hasMinimumPasswordLength(String password) => password.length >= 8;
+
+bool _hasLowercase(String password) => password.contains(RegExp('[a-z]'));
+
+bool _hasUppercase(String password) => password.contains(RegExp('[A-Z]'));
+
+bool _hasNumber(String password) => password.contains(RegExp('[0-9]'));
+
+String? _validateDisplayName(String? value) {
+  final name = value?.trim() ?? '';
+  final length = name.runes.length;
+  if (length < 2 || length > 50) {
+    return 'Enter a display name from 2 to 50 characters.';
+  }
+  return null;
+}
+
+Future<bool> _confirmGuestTransferBeforeSignup(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final hasGuestData = await ref
+      .read(localSyncStoreProvider)
+      .hasActiveGuestData();
+  final linkedAccountId = await ref
+      .read(deviceAccountLinkStoreProvider)
+      .readLinkedAccountId();
+  if (!hasGuestData || linkedAccountId != null || !context.mounted) {
+    return true;
+  }
+  final transfer = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Transfer local data?'),
+      content: const Text(
+        'Kami found scans, batches, or orders saved on this device. Transfer '
+        'all active local data to this new account?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Transfer and create account'),
+        ),
+      ],
+    ),
+  );
+  return transfer == true;
 }
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -210,6 +225,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       title: 'Sign in',
       icon: Icons.login,
       intro: 'Access synchronized scans, batches, orders, and private photos.',
+      leading: IconButton(
+        tooltip: 'Back to account choice',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => context.go(AppRoutes.accountChoice),
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -227,7 +247,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ),
               validator: _validateEmail,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
             TextFormField(
               controller: _passwordController,
               enabled: !_submitting,
@@ -255,7 +275,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            const SizedBox(height: 20),
+            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
@@ -289,15 +309,18 @@ class CreateAccountScreen extends ConsumerStatefulWidget {
 
 class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _displayNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmationController = TextEditingController();
   bool _submitting = false;
   bool _obscurePassword = true;
+  String _password = '';
   String? _error;
 
   @override
   void dispose() {
+    _displayNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmationController.dispose();
@@ -306,6 +329,8 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final transferApproved = await _confirmGuestTransferBeforeSignup(context, ref);
+    if (!transferApproved || !mounted) return;
     setState(() {
       _submitting = true;
       _error = null;
@@ -316,7 +341,13 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
           .createAccount(
             email: _emailController.text,
             password: _passwordController.text,
+            displayName: _displayNameController.text.trim(),
           );
+      if (!mounted) return;
+      final linkStore = ref.read(deviceAccountLinkStoreProvider);
+      if (await linkStore.readLinkedAccountId() == null) {
+        await linkStore.writeLinkedAccountId(result.user.id);
+      }
       if (!mounted) return;
       if (result.requiresEmailConfirmation) {
         await showDialog<void>(
@@ -336,7 +367,14 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
         );
         if (mounted) context.go(AppRoutes.signIn);
       } else {
-        await _openAfterAuthentication(context, ref, result.user);
+        if (!mounted) return;
+        await _openAfterAuthentication(
+          context,
+          ref,
+          result.user,
+          createdAccount: true,
+          transferApproved: transferApproved,
+        );
       }
     } on AccountAuthException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -357,6 +395,18 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextFormField(
+              controller: _displayNameController,
+              enabled: !_submitting,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.nickname],
+              decoration: const InputDecoration(
+                labelText: 'Display name',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+              validator: _validateDisplayName,
+            ),
+            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            TextFormField(
               controller: _emailController,
               enabled: !_submitting,
               keyboardType: TextInputType.emailAddress,
@@ -368,13 +418,14 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               ),
               validator: _validateEmail,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
             TextFormField(
               controller: _passwordController,
               enabled: !_submitting,
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.newPassword],
+              onChanged: (value) => setState(() => _password = value),
               decoration: InputDecoration(
                 labelText: 'Password',
                 prefixIcon: const Icon(Icons.lock_outline),
@@ -390,7 +441,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               ),
               validator: _validatePassword,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            _PasswordRequirements(password: _password),
+            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
             TextFormField(
               controller: _confirmationController,
               enabled: !_submitting,
@@ -409,7 +462,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            const SizedBox(height: 20),
+            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
@@ -499,7 +552,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     const SizedBox(height: 12),
                     _AccountError(message: _error!),
                   ],
-                  const SizedBox(height: 20),
+                  SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
                   FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
@@ -579,11 +632,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'New password',
+                helperText:
+                    'Use 8+ characters with uppercase, lowercase, and a number.',
+                helperMaxLines: 2,
                 prefixIcon: Icon(Icons.lock_outline),
               ),
               validator: _validatePassword,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
             TextFormField(
               controller: _confirmationController,
               enabled: !_submitting,
@@ -602,7 +658,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            const SizedBox(height: 20),
+            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
@@ -619,48 +675,105 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   }
 }
 
+class _PasswordRequirements extends StatelessWidget {
+  const _PasswordRequirements({required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    final requirements = [
+      ('At least 8 characters', _hasMinimumPasswordLength(password)),
+      ('Contains uppercase letter', _hasUppercase(password)),
+      ('Contains lowercase letter', _hasLowercase(password)),
+      ('Contains number', _hasNumber(password)),
+    ];
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Password requirements',
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
+        const SizedBox(height: 4),
+        ...requirements.map(
+          (requirement) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: Row(
+              children: [
+                Icon(
+                  requirement.$2
+                      ? Icons.check_circle_outline
+                      : Icons.cancel_outlined,
+                  size: 16,
+                  color: requirement.$2 ? colors.primary : colors.error,
+                  semanticLabel: requirement.$2 ? 'Met' : 'Not met',
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    requirement.$1,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _AccountFormScaffold extends StatelessWidget {
   const _AccountFormScaffold({
     required this.title,
     required this.icon,
     required this.intro,
+    this.leading,
     required this.child,
   });
 
   final String title;
   final IconData icon;
   final String intro;
+  final Widget? leading;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final compact = KamiResponsive.isCompactPhone(context);
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(title), leading: leading),
       body: SafeArea(
         top: false,
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(compact ? 12 : 20),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(compact ? 16 : 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Icon(
                         icon,
-                        size: 56,
+                        size: compact ? 40 : 56,
                         color: Theme.of(context).colorScheme.primary,
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: compact ? 12 : 16),
                       Text(
                         intro,
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
+                        style: compact
+                            ? Theme.of(context).textTheme.bodyMedium
+                            : Theme.of(context).textTheme.bodyLarge,
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: compact ? 16 : 24),
                       child,
                     ],
                   ),

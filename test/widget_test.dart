@@ -547,13 +547,7 @@ void main() {
     expect(find.text('Organize fruit by batch'), findsOneWidget);
     expect(find.text('No batches yet'), findsOneWidget);
     expect(find.text('Ready offline'), findsOneWidget);
-    expect(find.text('Create first batch'), findsOneWidget);
-
-    await tester.tap(find.text('Create first batch'));
-    await _pumpRoute(tester);
-
-    expect(find.text('Start a new batch'), findsOneWidget);
-    expect(find.text('Batch name'), findsOneWidget);
+    expect(find.text('Create first batch'), findsNothing);
   });
 
   testWidgets('History and Batches support larger text on a narrow screen', (
@@ -577,7 +571,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Batches'));
     await tester.pumpAndSettle();
     expect(find.text('Organize fruit by batch'), findsOneWidget);
-    expect(find.text('Create first batch'), findsOneWidget);
+    expect(find.text('Create first batch'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

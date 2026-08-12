@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'schema version five opens with foreign keys and matches Drift',
+    'schema version six opens with foreign keys and matches Drift',
     () async {
       final foreignKeys = await database
           .customSelect('PRAGMA foreign_keys')
@@ -58,12 +58,36 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
 
-      expect(database.schemaVersion, 5);
+      expect(database.schemaVersion, 6);
       expect(foreignKeys.data.values.single, 1);
-      expect(userVersion.data.values.single, 5);
+      expect(userVersion.data.values.single, 6);
       await database.validateDatabaseSchema();
     },
   );
+
+  test('account-scoped history hides unrelated guest and account rows', () async {
+    await scans.create(_scan(id: _scanOneId));
+    await scans.create(_scan(id: _scanTwoId, ownerId: _ownerOneId));
+    await scans.create(_scan(id: _scanThreeId, ownerId: _ownerTwoId));
+
+    final accountView = DriftScanRecordRepository(
+      database,
+      ownerId: _ownerOneId,
+      scopeOwner: true,
+    );
+    expect(
+      (await accountView.listActive()).map((record) => record.id),
+      [_scanTwoId],
+    );
+    final guestView = DriftScanRecordRepository(
+      database,
+      scopeOwner: true,
+    );
+    expect(
+      (await guestView.listActive()).map((record) => record.id),
+      [_scanOneId],
+    );
+  });
 
   test('version one scan rows migrate with explicit Demo provenance', () async {
     await database.close();
@@ -122,7 +146,7 @@ void main() {
           .data
           .values
           .single,
-      5,
+      6,
     );
   });
 
@@ -231,7 +255,7 @@ void main() {
             .data
             .values
             .single,
-        5,
+        6,
       );
     },
   );
@@ -835,6 +859,7 @@ void main() {
         .insert(
           const AppSettingsCompanion(
             id: Value(1),
+            consentAccountId: Value(_ownerOneId),
             imageUploadConsent: Value(false),
             consentVersion: Value('consent-v1'),
           ),

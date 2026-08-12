@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/auth/application/current_owner_provider.dart';
+import 'package:kami/features/auth/data/device_account_link_store.dart';
 import 'package:kami/features/auth/domain/auth_repository.dart';
 import 'package:kami/features/history/data/app_private_retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
@@ -15,6 +16,7 @@ final accountSessionServiceProvider = Provider<AccountSessionService>((ref) {
     ref.watch(retainedScanImageStoreProvider),
     ref.watch(syncCoordinatorProvider),
     ref.watch(currentOwnerIdProvider),
+    ref.watch(deviceAccountLinkStoreProvider),
   );
 });
 
@@ -27,6 +29,7 @@ final class AccountSessionService {
     this._images,
     this._sync,
     this._userId,
+    this._deviceLink,
   );
 
   final AuthRepository _auth;
@@ -34,6 +37,7 @@ final class AccountSessionService {
   final RetainedScanImageStore _images;
   final SyncCoordinator _sync;
   final String? _userId;
+  final DeviceAccountLinkStore _deviceLink;
 
   Future<AccountSignOutResult> signOut({bool discardChanges = false}) async {
     final userId = _userId;
@@ -50,6 +54,7 @@ final class AccountSessionService {
         }
       }
       await _removeLocalAccount(userId);
+      await _deviceLink.clearLinkedAccountIdIfMatches(userId);
       await _auth.signOut(localOnly: true);
       return AccountSignOutResult.signedOut;
     } on Object {

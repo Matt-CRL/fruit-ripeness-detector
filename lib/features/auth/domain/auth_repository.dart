@@ -9,10 +9,11 @@ enum AccountAuthEvent {
 }
 
 final class AccountUser {
-  const AccountUser({required this.id, required this.email});
+  const AccountUser({required this.id, required this.email, this.displayName});
 
   final String id;
   final String email;
+  final String? displayName;
 }
 
 final class AccountAuthState {
@@ -51,7 +52,10 @@ abstract interface class AuthRepository {
   Future<AccountSignUpResult> createAccount({
     required String email,
     required String password,
+    required String displayName,
   });
+
+  Future<AccountUser> updateDisplayName(String displayName);
 
   Future<AccountUser> signIn({required String email, required String password});
 
