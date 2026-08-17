@@ -511,7 +511,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Keep offline data on this device?'),
         content: const Text(
-          'Kami will unlink this device and keep your scans, batches, orders, '
+          'Chami will unlink this device and keep your scans, batches, orders, '
           'and saved photos as local-only Guest data. The detached copy will '
           'not synchronize to the old account, and the cloud account itself '
           'will not be deleted.',
@@ -784,7 +784,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               title: Row(
                 children: [
-                  Flexible(child: Text(accountDisplayName ?? 'Kami account')),
+                  Flexible(child: Text(accountDisplayName ?? 'Chami account')),
                   const SizedBox(width: 4),
                   IconButton(
                     tooltip: 'Edit display name',

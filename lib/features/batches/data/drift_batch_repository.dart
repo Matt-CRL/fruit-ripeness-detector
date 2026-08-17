@@ -397,27 +397,51 @@ final class DriftBatchRepository implements BatchRepository {
     required String targetBatchId,
     required DateTime updatedAt,
   }) async {
-    PersistenceValidation.entityId(scanId, 'scanId');
+    await moveScans(
+      scanIds: [scanId],
+      targetBatchId: targetBatchId,
+      updatedAt: updatedAt,
+    );
+  }
+
+  @override
+  Future<void> moveScans({
+    required Iterable<String> scanIds,
+    required String targetBatchId,
+    required DateTime updatedAt,
+  }) async {
+    final ids = scanIds.toSet().toList(growable: false);
+    if (ids.isEmpty) {
+      throw StateError('At least one scan is required.');
+    }
+    for (final scanId in ids) {
+      PersistenceValidation.entityId(scanId, 'scanId');
+    }
     PersistenceValidation.entityId(targetBatchId, 'targetBatchId');
     PersistenceValidation.utc(updatedAt, 'updatedAt');
 
     await _database.transaction(() async {
-      final scanQuery = _database.select(_database.scanRecords)
-        ..where((table) => table.id.equals(scanId) & table.deletedAt.isNull());
-      final scan = await scanQuery.getSingleOrNull();
-      if (scan == null || scan.batchId == null) {
-        throw StateError('The scan is not assigned to an active batch.');
+      final scansQuery = _database.select(_database.scanRecords)
+        ..where((table) => table.id.isIn(ids) & table.deletedAt.isNull());
+      final scans = await scansQuery.get();
+      if (scans.length != ids.length ||
+          scans.any((scan) => scan.batchId == null)) {
+        throw StateError('A selected scan is not assigned to an active batch.');
       }
-      if (scan.batchId == targetBatchId) {
+      final sourceBatchId = scans.first.batchId!;
+      if (scans.any((scan) => scan.batchId != sourceBatchId)) {
+        throw StateError('Selected scans must belong to the same batch.');
+      }
+      if (sourceBatchId == targetBatchId) {
         return;
       }
-      if (updatedAt.isBefore(scan.updatedAt.toUtc())) {
-        throw StateError('The move timestamp is older than the scan.');
+      if (scans.any((scan) => updatedAt.isBefore(scan.updatedAt.toUtc()))) {
+        throw StateError('The move timestamp is older than a selected scan.');
       }
-      await _requireUnlockedBatch(scan.batchId!);
+      await _requireUnlockedBatch(sourceBatchId);
       await _ensurePendingOrderKeepsAnotherScan(
-        batchId: scan.batchId!,
-        excludedScanIds: [scanId],
+        batchId: sourceBatchId,
+        excludedScanIds: ids,
       );
 
       final targetQuery = _database.select(_database.batches)
@@ -428,29 +452,34 @@ final class DriftBatchRepository implements BatchRepository {
       if (target == null) {
         throw StateError('The destination batch does not exist.');
       }
-      if (target.fruitType != scan.fruitType ||
-          target.ownerId != scan.ownerId) {
+      if (scans.any(
+        (scan) =>
+            target.fruitType != scan.fruitType ||
+            target.ownerId != scan.ownerId,
+      )) {
         throw StateError(
-          'The destination batch is not compatible with this scan.',
+          'The destination batch is not compatible with the selected scans.',
         );
       }
       await _requireUnlockedBatch(targetBatchId);
 
-      await (_database.update(
-        _database.scanRecords,
-      )..where((table) => table.id.equals(scanId))).write(
-        ScanRecordsCompanion(
-          batchId: Value(targetBatchId),
-          updatedAt: Value(updatedAt),
-          syncState: Value(
-            PersistenceCodecs.encodeSyncState(
-              scan.ownerId == null
-                  ? LocalSyncState.localOnly
-                  : LocalSyncState.pending,
+      for (final scan in scans) {
+        await (_database.update(
+          _database.scanRecords,
+        )..where((table) => table.id.equals(scan.id))).write(
+          ScanRecordsCompanion(
+            batchId: Value(targetBatchId),
+            updatedAt: Value(updatedAt),
+            syncState: Value(
+              PersistenceCodecs.encodeSyncState(
+                scan.ownerId == null
+                    ? LocalSyncState.localOnly
+                    : LocalSyncState.pending,
+              ),
             ),
           ),
-        ),
-      );
+        );
+      }
     });
   }
 

@@ -100,7 +100,7 @@ final class DeleteSavedScanUseCase {
       throw const ScanManagementException(PendingOrderBatchException.message);
     } on Object {
       throw const ScanManagementException(
-        'Kami could not delete this saved scan. It is still available in '
+        'Chami could not delete this saved scan. It is still available in '
         'History.',
       );
     }
@@ -116,7 +116,7 @@ final class DeleteSavedScanUseCase {
       throw const ScanManagementException(PendingOrderBatchException.message);
     } on Object {
       throw const ScanManagementException(
-        'Kami could not delete these saved scans. They are still available in '
+        'Chami could not delete these saved scans. They are still available in '
         'History.',
       );
     }

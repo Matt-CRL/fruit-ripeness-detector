@@ -9,9 +9,9 @@ Future<bool?> requestDevelopmentPhotoConsent(BuildContext context) {
       content: const SingleChildScrollView(
         child: Text(
           'Development privacy notice (draft v1)\n\n'
-          'Kami synchronizes scan metadata, batches, orders, and account '
+          'Chami synchronizes scan metadata, batches, orders, and account '
           'settings so your account can work across devices. If you allow '
-          'photo backup, Kami also stores the compressed, metadata-stripped '
+          'photo backup, Chami also stores the compressed, metadata-stripped '
           'JPEG retained in History. Photos are private to your account.\n\n'
           'You can withdraw photo consent later. Withdrawal removes uploaded '
           'photos while keeping local copies and metadata synchronization. '

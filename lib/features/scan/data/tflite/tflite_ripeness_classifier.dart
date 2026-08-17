@@ -27,7 +27,7 @@ final class TfliteRipenessClassifier
   Future<ClassificationResult> classify(String imagePath) async {
     if (_closed) {
       throw const RipenessClassificationException(
-        'The on-device model is no longer available. Restart Kami and try again.',
+        'The on-device model is no longer available. Restart Chami and try again.',
       );
     }
 
@@ -44,7 +44,7 @@ final class TfliteRipenessClassifier
       rethrow;
     } on ImagePreprocessingException catch (error) {
       throw RipenessClassificationException(
-        'Kami could not prepare that image for assessment. Choose another photo.',
+        'Chami could not prepare that image for assessment. Choose another photo.',
         error,
       );
     } on Object catch (error, stackTrace) {
@@ -55,7 +55,7 @@ final class TfliteRipenessClassifier
         debugPrintStack(stackTrace: stackTrace);
       }
       throw RipenessClassificationException(
-        'Kami could not run the on-device model. Restart the app or choose another photo.',
+        'Chami could not run the on-device model. Restart the app or choose another photo.',
         error,
       );
     }
@@ -65,7 +65,7 @@ final class TfliteRipenessClassifier
   Future<ClassificationResult> classifyFrame(LiveCameraFrame frame) async {
     if (_closed) {
       throw const RipenessClassificationException(
-        'The on-device model is no longer available. Restart Kami and try again.',
+        'The on-device model is no longer available. Restart Chami and try again.',
       );
     }
 
@@ -82,7 +82,7 @@ final class TfliteRipenessClassifier
       rethrow;
     } on ImagePreprocessingException catch (error) {
       throw RipenessClassificationException(
-        'Kami could not prepare the camera frame for assessment.',
+        'Chami could not prepare the camera frame for assessment.',
         error,
       );
     } on Object catch (error, stackTrace) {
@@ -93,7 +93,7 @@ final class TfliteRipenessClassifier
         debugPrintStack(stackTrace: stackTrace);
       }
       throw RipenessClassificationException(
-        'Kami could not run the on-device model for Live Scan.',
+        'Chami could not run the on-device model for Live Scan.',
         error,
       );
     }

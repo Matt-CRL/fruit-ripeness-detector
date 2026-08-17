@@ -22,6 +22,7 @@ class SavedScanDetailScreen extends ConsumerWidget {
     required this.scanId,
     this.openedFromHistory = false,
     this.openedFromAddScans = false,
+    this.addToBatchId,
     this.openedFromBatchScans = false,
     super.key,
   });
@@ -29,6 +30,7 @@ class SavedScanDetailScreen extends ConsumerWidget {
   final String scanId;
   final bool openedFromHistory;
   final bool openedFromAddScans;
+  final String? addToBatchId;
   final bool openedFromBatchScans;
 
   @override
@@ -52,6 +54,7 @@ class SavedScanDetailScreen extends ConsumerWidget {
                 record: value,
                 openedFromHistory: openedFromHistory,
                 openedFromAddScans: openedFromAddScans,
+                addToBatchId: addToBatchId,
                 openedFromBatchScans: openedFromBatchScans,
               ),
       ),
@@ -64,12 +67,14 @@ class _SavedScanDetails extends StatelessWidget {
     required this.record,
     required this.openedFromHistory,
     required this.openedFromAddScans,
+    required this.addToBatchId,
     required this.openedFromBatchScans,
   });
 
   final SavedScanRecord record;
   final bool openedFromHistory;
   final bool openedFromAddScans;
+  final String? addToBatchId;
   final bool openedFromBatchScans;
 
   @override
@@ -206,6 +211,8 @@ class _SavedScanDetails extends StatelessWidget {
                 _SavedScanManagementActions(
                   record: record,
                   openedFromHistory: openedFromHistory,
+                  openedFromAddScans: openedFromAddScans,
+                  addToBatchId: addToBatchId,
                   hideBatchActions: openedFromAddScans,
                   openedFromBatchScans: openedFromBatchScans,
                 ),
@@ -222,12 +229,16 @@ class _SavedScanManagementActions extends ConsumerStatefulWidget {
   const _SavedScanManagementActions({
     required this.record,
     this.openedFromHistory = false,
+    this.openedFromAddScans = false,
+    this.addToBatchId,
     this.hideBatchActions = false,
     this.openedFromBatchScans = false,
   });
 
   final SavedScanRecord record;
   final bool openedFromHistory;
+  final bool openedFromAddScans;
+  final String? addToBatchId;
   final bool hideBatchActions;
   final bool openedFromBatchScans;
 
@@ -240,6 +251,27 @@ class _SavedScanManagementActionsState
     extends ConsumerState<_SavedScanManagementActions> {
   bool _working = false;
   String? _errorMessage;
+
+  Future<void> _addToCurrentBatch() async {
+    final batchId = widget.addToBatchId;
+    if (batchId == null || _working) return;
+    setState(() {
+      _working = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref
+          .read(addScanToBatchUseCaseProvider)
+          .execute(scanId: widget.record.id, batchId: batchId);
+      if (mounted) context.pop(true);
+    } on BatchActionException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _errorMessage = error.message;
+      });
+    }
+  }
 
   Future<bool> _confirm({
     required String title,
@@ -349,6 +381,41 @@ class _SavedScanManagementActionsState
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
+    if (widget.openedFromAddScans) {
+      if (record.batchId != null) {
+        return const Text('This scan is no longer available to add.');
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          FilledButton.icon(
+            onPressed: _working
+                ? null
+                : widget.addToBatchId == null
+                ? () => context.push(AppRoutes.addToBatch(record.id))
+                : _addToCurrentBatch,
+            icon: _working
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.playlist_add),
+            label: Text(_working ? 'Adding...' : 'Add to Batch'),
+          ),
+        ],
+      );
+    }
+
     if (widget.hideBatchActions) {
       return const SizedBox.shrink();
     }

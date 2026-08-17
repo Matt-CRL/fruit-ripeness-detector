@@ -215,7 +215,7 @@ Future<bool?> _confirmOfflineWorkspaceLink(
       title: const Text('Keep local data with this account?'),
       content: Text(
         hasGuestData
-            ? 'Kami found local scans, batches, or orders. Link this account '
+            ? 'Chami found local scans, batches, or orders. Link this account '
                   'so they remain available when you sign out and return to '
                   'Guest mode.'
             : 'Link this account to the offline workspace on this device. '
@@ -721,7 +721,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     return _AccountFormScaffold(
       title: 'Choose a new password',
       icon: Icons.password_outlined,
-      intro: 'Set a new password for your Kami account.',
+      intro: 'Set a new password for your Chami account.',
       child: Form(
         key: _formKey,
         child: Column(

@@ -107,7 +107,7 @@ final class AccountSessionService {
       throw AccountSessionException(
         remoteDeleted
             ? 'The cloud account was deleted, but device cleanup did not '
-                  'finish. Restart Kami to clear the local session.'
+                  'finish. Restart Chami to clear the local session.'
             : 'Account deletion did not finish. Your account remains '
                   'available; check your connection and retry.',
       );

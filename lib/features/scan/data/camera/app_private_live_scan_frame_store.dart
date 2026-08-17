@@ -66,7 +66,7 @@ final class AppPrivateLiveScanFrameStore implements LiveScanFrameStore {
         await pending.delete();
       }
       throw LiveScanFrameStoreException(
-        'Kami could not prepare the live result image for saving.',
+        'Chami could not prepare the live result image for saving.',
         error,
       );
     }

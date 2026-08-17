@@ -63,28 +63,17 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
-                    child: Container(
-                      width: compact ? 64 : 80,
-                      height: compact ? 64 : 80,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.eco,
-                        size: compact ? 36 : 44,
-                        color: colorScheme.primary,
-                        semanticLabel: 'Kami leaf',
-                      ),
+                    child: Image.asset(
+                      colorScheme.brightness == Brightness.dark
+                          ? 'assets/branding/chami_wordmark_dark.png'
+                          : 'assets/branding/chami_wordmark_light.png',
+                      key: const Key('chami-wordmark'),
+                      width: compact ? 240 : 300,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'Chami logo',
                     ),
                   ),
                   SizedBox(height: compact ? 12 : 18),
-                  Text(
-                    'Welcome to Kami',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
                   const Text(
                     'Check fruit ripeness in a few steps.',
                     textAlign: TextAlign.center,

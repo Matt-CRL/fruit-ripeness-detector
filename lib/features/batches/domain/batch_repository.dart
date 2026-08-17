@@ -62,6 +62,14 @@ abstract interface class BatchRepository {
     required DateTime updatedAt,
   });
 
+  /// Moves multiple scans from one batch to a compatible target atomically.
+  /// Implementations must preserve Pending-order and completed-order rules.
+  Future<void> moveScans({
+    required Iterable<String> scanIds,
+    required String targetBatchId,
+    required DateTime updatedAt,
+  });
+
   Future<void> rename({
     required String batchId,
     required String name,

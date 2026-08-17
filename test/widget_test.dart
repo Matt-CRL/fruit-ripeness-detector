@@ -67,7 +67,9 @@ void main() {
       preferences: preferences,
     );
 
-    expect(find.text('Welcome to Kami'), findsOneWidget);
+    expect(find.byKey(const Key('chami-wordmark')), findsOneWidget);
+    expect(find.bySemanticsLabel('Chami logo'), findsOneWidget);
+    expect(find.text('Welcome to Chami'), findsNothing);
     expect(find.text('Continue as guest'), findsOneWidget);
     expect(find.text('No account or internet needed.'), findsOneWidget);
     expect(find.text('START HERE'), findsNothing);
@@ -92,7 +94,7 @@ void main() {
     expect(find.text('Organize fruits into batches'), findsOneWidget);
     expect(find.text('3 of 3'), findsOneWidget);
 
-    await tester.tap(find.text('Start using Kami'));
+    await tester.tap(find.text('Start using Chami'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ready to check a fruit?'), findsOneWidget);
@@ -101,6 +103,26 @@ void main() {
       await preferences.readDestination(),
       StartupDestination.returningGuest,
     );
+  });
+
+  testWidgets('account entry uses the readable dark Chami wordmark', (
+    WidgetTester tester,
+  ) async {
+    await _pumpKami(
+      tester,
+      destination: StartupDestination.accountEntry,
+      preferences: FakeStartupPreferences(appearanceMode: AppearanceMode.dark),
+    );
+
+    final wordmark = tester.widget<Image>(
+      find.byKey(const Key('chami-wordmark')),
+    );
+    expect(
+      (wordmark.image as AssetImage).assetName,
+      'assets/branding/chami_wordmark_dark.png',
+    );
+    expect(find.bySemanticsLabel('Chami logo'), findsOneWidget);
+    expect(find.text('Welcome to Chami'), findsNothing);
   });
 
   testWidgets('onboarding slides can be swiped backward', (
@@ -160,7 +182,7 @@ void main() {
     );
 
     expect(find.text('Scan or upload a fruit'), findsOneWidget);
-    expect(find.text('Welcome to Kami'), findsNothing);
+    expect(find.text('Welcome to Chami'), findsNothing);
   });
 
   testWidgets('failed guest preference write stays on account entry', (
@@ -175,7 +197,8 @@ void main() {
     await tester.tap(find.text('Continue as guest'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Kami'), findsOneWidget);
+    expect(find.byKey(const Key('chami-wordmark')), findsOneWidget);
+    expect(find.text('Welcome to Chami'), findsNothing);
     expect(
       find.text('Guest mode could not be started. Please try again.'),
       findsOneWidget,
@@ -195,7 +218,7 @@ void main() {
     );
 
     expect(find.text('Ready to check a fruit?'), findsOneWidget);
-    expect(find.text('Welcome to Kami'), findsNothing);
+    expect(find.text('Welcome to Chami'), findsNothing);
     expect(
       tester
           .widget<Scaffold>(find.byKey(const Key('main-shell-scaffold')))
@@ -227,7 +250,7 @@ void main() {
     );
 
     expect(find.text('Ready to check a fruit?'), findsOneWidget);
-    expect(find.text('Welcome to Kami'), findsNothing);
+    expect(find.text('Welcome to Chami'), findsNothing);
   });
 
   testWidgets('guest can cancel or confirm return to sign in', (
@@ -270,7 +293,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Kami'), findsOneWidget);
+    expect(find.byKey(const Key('chami-wordmark')), findsOneWidget);
+    expect(find.text('Welcome to Chami'), findsNothing);
     expect(
       find.text('Works locally without an account or internet.'),
       findsNothing,
@@ -1252,7 +1276,7 @@ void main() {
 
     expect(find.text('Gallery unavailable'), findsOneWidget);
     expect(
-      find.text('Kami could not open that image. Please choose another one.'),
+      find.text('Chami could not open that image. Please choose another one.'),
       findsOneWidget,
     );
   });
@@ -1805,6 +1829,68 @@ void main() {
     );
   });
 
+  testWidgets('Batch Details moves selected scans to another batch', (
+    WidgetTester tester,
+  ) async {
+    final assignedScans = _batchScanFixtures(count: 2);
+    final scans = FakeScanRecordRepository(initialRecords: assignedScans);
+    final batches = FakeBatchRepository(
+      scans,
+      initialBatches: [
+        _batchFixture(),
+        _batchFixture(id: _pendingBatchFixtureId, name: 'Second mangoes'),
+      ],
+    );
+    await _pumpReturningGuest(
+      tester,
+      imagePicker: FakeScanImagePicker(),
+      scanRepository: scans,
+      batchRepository: batches,
+      batchSnapshotOverride: BatchSnapshot(
+        batch: _batchFixture(),
+        summary: const BatchSummary(total: 2, unripe: 1, ripe: 1, overripe: 0),
+        scans: assignedScans,
+        isLocked: false,
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Batches'));
+    await _pumpRoute(tester);
+    await tester.tap(find.text('Market mangoes'));
+    await _pumpRoute(tester);
+    await _pumpRoute(tester);
+    await tester.tap(find.text('View all scans (2)'));
+    await _pumpRoute(tester);
+    await tester.tap(find.text('Select'));
+    await tester.pump();
+    await tester.tap(find.byType(Checkbox).at(0));
+    await tester.tap(find.byType(Checkbox).at(1));
+    await tester.pump();
+
+    expect(
+      find.widgetWithText(OutlinedButton, 'Move to another batch'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FilledButton, 'Remove (2)'), findsOneWidget);
+    await tester.tap(
+      find.widgetWithText(OutlinedButton, 'Move to another batch'),
+    );
+    await _pumpRoute(tester);
+
+    expect(find.text('Move saved scans'), findsOneWidget);
+    expect(find.text('2 scans selected'), findsOneWidget);
+    await tester.tap(find.text('Second mangoes'));
+    await _pumpRoute(tester);
+
+    expect(find.text('2 scans moved to another batch.'), findsOneWidget);
+    expect(
+      (await scans.listActive()).every(
+        (scan) => scan.batchId == _pendingBatchFixtureId,
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('Batch Details adds only unassigned scans of the same fruit', (
     WidgetTester tester,
   ) async {
@@ -1861,7 +1947,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right));
     await _pumpRoute(tester);
     expect(find.text('Saved scan'), findsOneWidget);
-    expect(find.text('Add to Batch'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Add to Batch'), findsOneWidget);
     expect(find.text('Delete saved scan'), findsNothing);
     expect(find.textContaining('Reviewing this scan'), findsNothing);
     await tester.binding.handlePopRoute();
@@ -1886,6 +1972,45 @@ void main() {
     );
     expect(find.text('1 scan added successfully.'), findsOneWidget);
     expect(find.text('Saved scans'), findsOneWidget);
+  });
+
+  testWidgets('Add scans detail adds directly to the current batch', (
+    WidgetTester tester,
+  ) async {
+    final available = _savedDemoRecord(
+      id: '88888888-8888-4888-8888-888888888888',
+      ripeness: RipenessStage.unripe,
+    );
+    final scans = FakeScanRecordRepository(initialRecords: [available]);
+    final batches = FakeBatchRepository(
+      scans,
+      initialBatches: [_batchFixture()],
+    );
+    await _pumpReturningGuest(
+      tester,
+      imagePicker: FakeScanImagePicker(),
+      scanRepository: scans,
+      batchRepository: batches,
+    );
+
+    await tester.tap(find.bySemanticsLabel('Batches'));
+    await _pumpRoute(tester);
+    await tester.tap(find.text('Market mangoes'));
+    await _pumpRoute(tester);
+    await tester.tap(find.text('Add scans'));
+    await _pumpRoute(tester);
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await _pumpRoute(tester);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Add to Batch'));
+    await _pumpRoute(tester);
+
+    expect(
+      (await scans.findActiveById(available.id))?.batchId,
+      _batchFixtureId,
+    );
+    expect(find.text('Add scans to batch'), findsOneWidget);
+    expect(find.text('Scan added to Market mangoes.'), findsOneWidget);
   });
 
   testWidgets('Batches shows a compact order-status tag for each batch', (

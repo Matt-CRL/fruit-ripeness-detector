@@ -85,7 +85,7 @@ final class LiveScanController extends ChangeNotifier {
       await _fail(
         LiveCameraFailure(
           LiveCameraFailureKind.initialization,
-          'Kami could not start Live Scan.',
+          'Chami could not start Live Scan.',
           error,
         ),
         generation,
@@ -193,7 +193,7 @@ final class LiveScanController extends ChangeNotifier {
       await _fail(
         LiveCameraFailure(
           LiveCameraFailureKind.streaming,
-          'Kami could not analyze the live camera frame.',
+          'Chami could not analyze the live camera frame.',
           error,
         ),
         generation,

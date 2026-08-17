@@ -54,7 +54,9 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
       }
     }
 
-    final contentSlivers = ref.watch(activeBatchListProvider).when<List<Widget>>(
+    final contentSlivers = ref
+        .watch(activeBatchListProvider)
+        .when<List<Widget>>(
           loading: () => [
             SliverToBoxAdapter(
               child: _batchBounded(
@@ -1102,6 +1104,29 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
     }
   }
 
+  Future<void> _moveSelected(Set<String> selectedIds) async {
+    if (selectedIds.isEmpty || _working) return;
+    final movedTo = await context.push<String>(
+      AppRoutes.moveMultipleScansToBatch,
+      extra: selectedIds.toList(growable: false),
+    );
+    if (!mounted || movedTo == null) return;
+    final count = selectedIds.length;
+    setState(() {
+      _selectionMode = false;
+      _selectedScanIds.clear();
+    });
+    await _reload();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$count ${count == 1 ? 'scan' : 'scans'} moved to another batch.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.snapshot;
@@ -1156,23 +1181,39 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
                 if (_selectionMode) ...[
                   Align(
                     alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: selectedIds.isEmpty || _working
-                          ? null
-                          : () => _removeSelected(selectedIds),
-                      icon: _working
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.remove_circle_outline),
-                      label: Text(
-                        _working
-                            ? 'Removing scans...'
-                            : selectedIds.isEmpty
-                            ? 'Remove'
-                            : 'Remove (${selectedIds.length})',
-                      ),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: selectedIds.isEmpty || _working
+                              ? null
+                              : () => _moveSelected(selectedIds),
+                          icon: const Icon(Icons.drive_file_move_outline),
+                          label: const Text('Move to another batch'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: selectedIds.isEmpty || _working
+                              ? null
+                              : () => _removeSelected(selectedIds),
+                          icon: _working
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.remove_circle_outline),
+                          label: Text(
+                            _working
+                                ? 'Removing scans...'
+                                : selectedIds.isEmpty
+                                ? 'Remove'
+                                : 'Remove (${selectedIds.length})',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (_errorMessage != null) ...[
@@ -2077,6 +2118,9 @@ class _BatchManagementCardState extends ConsumerState<_BatchManagementCard> {
             ],
             const SizedBox(height: 10),
             TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
               onPressed: deletable && !_working
                   ? () => _delete(deleteCompletedWithScans: locked)
                   : null,

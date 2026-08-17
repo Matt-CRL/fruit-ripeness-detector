@@ -102,7 +102,7 @@ class _KamiAppState extends ConsumerState<KamiApp> with WidgetsBindingObserver {
     });
 
     return MaterialApp.router(
-      title: 'Kami',
+      title: 'Chami',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

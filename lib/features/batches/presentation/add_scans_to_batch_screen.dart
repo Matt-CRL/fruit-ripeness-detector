@@ -118,6 +118,24 @@ class _AddScansToBatchScreenState extends ConsumerState<AddScansToBatchScreen> {
     }
   }
 
+  Future<void> _openRecord(String scanId, BatchSnapshot snapshot) async {
+    if (_assigning) return;
+    final added = await context.push<bool>(
+      AppRoutes.savedScanDetails(
+        scanId,
+        fromAddScans: true,
+        addToBatchId: widget.batchId,
+      ),
+    );
+    if (!mounted || added != true) return;
+    ref.invalidate(batchSnapshotProvider(widget.batchId));
+    await _reloadPage(snapshot);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Scan added to ${snapshot.batch.name}.')),
+    );
+  }
+
   Future<void> _assign(Iterable<String> scanIds) async {
     final ids = scanIds.toSet().toList(growable: false);
     if (ids.isEmpty || _assigning) {
@@ -337,6 +355,7 @@ class _AddScansToBatchScreenState extends ConsumerState<AddScansToBatchScreen> {
                       selected: selectedIds.contains(record.id),
                       disabled: _assigning,
                       onTap: () => _toggle(record.id),
+                      onOpen: () => _openRecord(record.id, snapshot),
                     ),
                     const SizedBox(height: 10),
                   ],
@@ -417,6 +436,7 @@ class _AddScansCard extends StatelessWidget {
     required this.selected,
     required this.disabled,
     required this.onTap,
+    required this.onOpen,
   });
 
   final SavedScanRecord record;
@@ -424,6 +444,7 @@ class _AddScansCard extends StatelessWidget {
   final bool selected;
   final bool disabled;
   final VoidCallback onTap;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -446,9 +467,7 @@ class _AddScansCard extends StatelessWidget {
               ? null
               : selectionEnabled
               ? onTap
-              : () => context.push(
-                  AppRoutes.savedScanDetails(record.id, fromAddScans: true),
-                ),
+              : onOpen,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(

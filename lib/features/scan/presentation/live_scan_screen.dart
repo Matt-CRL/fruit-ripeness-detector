@@ -125,7 +125,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
         setState(() {
           _saving = false;
           _saveError =
-              'Kami could not save this live result. Nothing was added to '
+              'Chami could not save this live result. Nothing was added to '
               'History. Keep the result paused and try again.';
         });
       }
@@ -183,7 +183,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
         LiveScanPhase.failed => _LiveScanFailure(
           kind: _controller.failureKind,
           message:
-              _controller.failureMessage ?? 'Kami could not start Live Scan.',
+              _controller.failureMessage ?? 'Chami could not start Live Scan.',
           onRetry: () => unawaited(_controller.initialize()),
         ),
         LiveScanPhase.active || LiveScanPhase.paused => _LiveCameraBody(

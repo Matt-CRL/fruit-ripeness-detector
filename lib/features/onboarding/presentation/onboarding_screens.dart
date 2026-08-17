@@ -28,10 +28,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _OnboardingContent(
       icon: Icons.fact_check_outlined,
       title: 'Understand the assessment',
-      description: 'Kami estimates ripeness from the fruit image you provide.',
+      description: 'Chami estimates ripeness from the fruit image you provide.',
       points: [
         'See Unripe, Ripe, or Overripe',
-        'See how sure Kami is about the result',
+        'See how sure Chami is about the result',
         'View shelf-life recommendations when available',
         'Use the result as guidance, not a guarantee',
       ],
@@ -213,7 +213,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 ),
                               )
                             : Text(
-                                isLastPage ? 'Start using Kami' : 'Next',
+                                isLastPage ? 'Start using Chami' : 'Next',
                                 maxLines: 1,
                               ),
                       ),

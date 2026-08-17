@@ -1,5 +1,5 @@
 name: kami
-description: "Kami Android application for offline Philippine fruit ripeness assessment."
+description: "Chami Android application for offline Philippine fruit ripeness assessment."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -72,6 +72,8 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/branding/chami_wordmark_light.png
+    - assets/branding/chami_wordmark_dark.png
     - assets/models/mobilenetv4_fruit_float32.manifest.json
     - assets/models/mobilenetv4_fruit_float32.tflite
 

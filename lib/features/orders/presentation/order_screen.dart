@@ -21,7 +21,7 @@ class OrderScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => const _OrderMessage(
           title: 'Batch unavailable',
-          message: 'Kami could not load this local batch.',
+          message: 'Chami could not load this local batch.',
         ),
         data: (snapshot) {
           if (snapshot == null) {
@@ -35,7 +35,7 @@ class OrderScreen extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stackTrace) => const _OrderMessage(
               title: 'Order unavailable',
-              message: 'Kami could not load the local order for this batch.',
+              message: 'Chami could not load the local order for this batch.',
             ),
             data: (value) {
               if (value == null && snapshot.summary.total == 0) {
@@ -96,7 +96,8 @@ class _OrderEditorState extends ConsumerState<_OrderEditor> {
     final today = _todayUtc();
     final savedDate = order?.deliveryDate;
     final initialDate = savedDate == null ? today : _dateOnlyUtc(savedDate);
-    _deliveryDate = order?.status == BatchOrderStatus.completed ||
+    _deliveryDate =
+        order?.status == BatchOrderStatus.completed ||
             !initialDate.isBefore(today)
         ? initialDate
         : today;
@@ -249,7 +250,7 @@ class _OrderEditorState extends ConsumerState<_OrderEditor> {
                 const SizedBox(height: 8),
                 Text(
                   'For ${widget.batchName}. Customer details stay on this '
-                  'device while Kami is offline.',
+                  'device while Chami is offline.',
                   style: const TextStyle(color: AppColors.secondaryText),
                 ),
                 const SizedBox(height: 20),

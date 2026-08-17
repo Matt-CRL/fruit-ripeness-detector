@@ -18,6 +18,88 @@ class MoveScanScreen extends ConsumerStatefulWidget {
   ConsumerState<MoveScanScreen> createState() => _MoveScanScreenState();
 }
 
+class MoveScansToBatchScreen extends ConsumerStatefulWidget {
+  const MoveScansToBatchScreen({required this.scanIds, super.key});
+
+  final List<String> scanIds;
+
+  @override
+  ConsumerState<MoveScansToBatchScreen> createState() =>
+      _MoveScansToBatchScreenState();
+}
+
+class _MoveScansToBatchScreenState
+    extends ConsumerState<MoveScansToBatchScreen> {
+  String? _movingToBatchId;
+  String? _errorMessage;
+
+  Future<void> _move(String targetBatchId) async {
+    if (_movingToBatchId != null) return;
+    setState(() {
+      _movingToBatchId = targetBatchId;
+      _errorMessage = null;
+    });
+    try {
+      await ref
+          .read(moveScansToBatchUseCaseProvider)
+          .execute(scanIds: widget.scanIds, targetBatchId: targetBatchId);
+      if (mounted) context.pop(targetBatchId);
+    } on BatchActionException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _movingToBatchId = null;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scans = ref.watch(activeScanRecordsProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Move saved scans')),
+      body: scans.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => const _MoveMessage(
+          title: 'Saved scans unavailable',
+          message: 'Chami could not load the selected scans.',
+        ),
+        data: (records) {
+          final selected = records
+              .where((record) => widget.scanIds.contains(record.id))
+              .toList(growable: false);
+          final sourceBatchId = selected.isEmpty
+              ? null
+              : selected.first.batchId;
+          final valid =
+              selected.length == widget.scanIds.length &&
+              selected.isNotEmpty &&
+              sourceBatchId != null &&
+              selected.every(
+                (record) =>
+                    record.batchId == sourceBatchId &&
+                    record.fruit == selected.first.fruit &&
+                    record.ownerId == selected.first.ownerId,
+              );
+          if (!valid) {
+            return const _MoveMessage(
+              title: 'These scans cannot be moved together',
+              message:
+                  'Select active scans from one editable batch and try again.',
+            );
+          }
+          return _MoveMultipleBody(
+            records: selected,
+            movingToBatchId: _movingToBatchId,
+            errorMessage: _errorMessage,
+            onMove: _move,
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _MoveScanScreenState extends ConsumerState<MoveScanScreen> {
   String? _movingToBatchId;
   String? _errorMessage;
@@ -57,7 +139,7 @@ class _MoveScanScreenState extends ConsumerState<MoveScanScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => const _MoveMessage(
           title: 'Saved scan unavailable',
-          message: 'Kami could not load this saved scan.',
+          message: 'Chami could not load this saved scan.',
         ),
         data: (record) {
           if (record == null) {
@@ -156,6 +238,123 @@ class _MoveBody extends ConsumerWidget {
                           message:
                               'Remove this scan from its current batch first, '
                               'then create or choose another batch.',
+                        )
+                      : Column(
+                          children: [
+                            for (final snapshot in snapshots) ...[
+                              _MoveTargetCard(
+                                snapshot: snapshot,
+                                moving: movingToBatchId == snapshot.batch.id,
+                                disabled: movingToBatchId != null,
+                                onTap: () => onMove(snapshot.batch.id),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MoveMultipleBody extends ConsumerWidget {
+  const _MoveMultipleBody({
+    required this.records,
+    required this.movingToBatchId,
+    required this.errorMessage,
+    required this.onMove,
+  });
+
+  final List<SavedScanRecord> records;
+  final String? movingToBatchId;
+  final String? errorMessage;
+  final ValueChanged<String> onMove;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final first = records.first;
+    final targets = ref.watch(moveTargetBatchSnapshotsProvider(first.id));
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
+      children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${records.length} scans selected',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'All are ${first.fruit.displayName} scans from the '
+                          'same batch.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Choose a new ${first.fruit.displayName} batch',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Only compatible, unlocked batches are shown. The selected '
+                  'scans stay unchanged if you cancel.',
+                  style: TextStyle(color: AppColors.secondaryText),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                targets.when(
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                  error: (error, stackTrace) => _MoveMessage(
+                    title: 'Batches could not be loaded',
+                    message:
+                        'Your selected scans remain in their current batch.',
+                    action: OutlinedButton.icon(
+                      onPressed: () => ref.invalidate(
+                        moveTargetBatchSnapshotsProvider(first.id),
+                      ),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ),
+                  data: (snapshots) => snapshots.isEmpty
+                      ? const _MoveMessage(
+                          title: 'No compatible batch available',
+                          message:
+                              'Create another unlocked batch of the same fruit '
+                              'before moving these scans.',
                         )
                       : Column(
                           children: [

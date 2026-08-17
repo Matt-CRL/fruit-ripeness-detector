@@ -19,7 +19,7 @@ class HomeScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Kami'),
+            const Text('Chami'),
             Text(
               'Fruit ripeness guide',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

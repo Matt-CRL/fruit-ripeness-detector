@@ -165,12 +165,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: AppRoutes.moveMultipleScansToBatch,
+        builder: (context, state) {
+          final scanIds = state.extra is List<String>
+              ? List<String>.from(state.extra! as List<String>)
+              : const <String>[];
+          return MoveScansToBatchScreen(scanIds: scanIds);
+        },
+      ),
+      GoRoute(
         path: '/saved-scans/:scanId',
         builder: (context, state) {
           return SavedScanDetailScreen(
             scanId: state.pathParameters['scanId']!,
             openedFromAddScans:
                 state.uri.queryParameters['context'] == 'add-scans',
+            addToBatchId: state.uri.queryParameters['batchId'],
             openedFromBatchScans:
                 state.uri.queryParameters['context'] == 'batch-scans',
           );
@@ -237,7 +247,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'Kami could not open this page.',
+              'Chami could not open this page.',
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),

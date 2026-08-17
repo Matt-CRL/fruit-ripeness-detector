@@ -65,6 +65,15 @@ final moveScanToBatchUseCaseProvider = Provider<MoveScanToBatchUseCase>((ref) {
   );
 });
 
+final moveScansToBatchUseCaseProvider = Provider<MoveScansToBatchUseCase>((
+  ref,
+) {
+  return MoveScansToBatchUseCase(
+    ref.watch(batchRepositoryProvider),
+    ref.watch(batchUtcNowProvider),
+  );
+});
+
 final renameBatchUseCaseProvider = Provider<RenameBatchUseCase>((ref) {
   return RenameBatchUseCase(
     ref.watch(batchRepositoryProvider),
@@ -146,7 +155,7 @@ final class CreateBatchUseCase {
       rethrow;
     } on Object {
       throw const BatchActionException(
-        'Kami could not create this batch. Your saved scans were not changed.',
+        'Chami could not create this batch. Your saved scans were not changed.',
       );
     }
   }
@@ -170,7 +179,7 @@ final class AddScanToBatchUseCase {
       );
     } on Object {
       throw const BatchActionException(
-        'Kami could not add this scan to the batch. The scan remains safely '
+        'Chami could not add this scan to the batch. The scan remains safely '
         'saved in History.',
       );
     }
@@ -199,7 +208,7 @@ final class AddScansToBatchUseCase {
       );
     } on Object {
       throw const BatchActionException(
-        'Kami could not add the selected scans. They were not changed. '
+        'Chami could not add the selected scans. They were not changed. '
         'Refresh and try again.',
       );
     }
@@ -219,7 +228,7 @@ final class RemoveScanFromBatchUseCase {
       throw const BatchActionException(PendingOrderBatchException.message);
     } on Object {
       throw const BatchActionException(
-        'Kami could not remove this scan from the batch. It is still in its '
+        'Chami could not remove this scan from the batch. It is still in its '
         'current batch.',
       );
     }
@@ -243,7 +252,7 @@ final class RemoveScansFromBatchUseCase {
       throw const BatchActionException(PendingOrderBatchException.message);
     } on Object {
       throw const BatchActionException(
-        'Kami could not remove the selected scans. They remain in their '
+        'Chami could not remove the selected scans. They remain in their '
         'current batch. Refresh and try again.',
       );
     }
@@ -270,7 +279,38 @@ final class MoveScanToBatchUseCase {
       throw const BatchActionException(PendingOrderBatchException.message);
     } on Object {
       throw const BatchActionException(
-        'Kami could not move this scan. It remains in its current batch.',
+        'Chami could not move this scan. It remains in its current batch.',
+      );
+    }
+  }
+}
+
+final class MoveScansToBatchUseCase {
+  const MoveScansToBatchUseCase(this._repository, this._utcNow);
+
+  final BatchRepository _repository;
+  final BatchUtcNow _utcNow;
+
+  Future<void> execute({
+    required Iterable<String> scanIds,
+    required String targetBatchId,
+  }) async {
+    final ids = scanIds.toSet().toList(growable: false);
+    if (ids.isEmpty) {
+      throw const BatchActionException('Select at least one saved scan.');
+    }
+    try {
+      await _repository.moveScans(
+        scanIds: ids,
+        targetBatchId: targetBatchId,
+        updatedAt: _utcNow(),
+      );
+    } on PendingOrderBatchException {
+      throw const BatchActionException(PendingOrderBatchException.message);
+    } on Object {
+      throw const BatchActionException(
+        'Chami could not move the selected scans. They remain in their '
+        'current batch. Refresh and try again.',
       );
     }
   }
@@ -303,7 +343,7 @@ final class RenameBatchUseCase {
       rethrow;
     } on Object {
       throw const BatchActionException(
-        'Kami could not rename this batch. Its current name was kept.',
+        'Chami could not rename this batch. Its current name was kept.',
       );
     }
   }
@@ -329,7 +369,7 @@ final class ChangeBatchFruitTypeUseCase {
       rethrow;
     } on Object {
       throw const BatchActionException(
-        'Kami could not change the fruit type. The batch was not changed.',
+        'Chami could not change the fruit type. The batch was not changed.',
       );
     }
   }
@@ -369,7 +409,7 @@ final class DeleteBatchUseCase {
         }
       }
     } on Object {
-      throw const BatchActionException('Kami could not delete this batch.');
+      throw const BatchActionException('Chami could not delete this batch.');
     }
   }
 }

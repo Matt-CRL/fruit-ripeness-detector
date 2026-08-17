@@ -96,7 +96,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       if (mounted) {
         setState(() {
           _errorMessage =
-              'Kami could not open that image. Please choose another one.';
+              'Chami could not open that image. Please choose another one.';
         });
       }
     } finally {
@@ -177,7 +177,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       if (mounted) {
         setState(() {
           _errorMessage =
-              'Kami could not assess that image. Please choose another photo.';
+              'Chami could not assess that image. Please choose another photo.';
         });
       }
     } finally {
@@ -357,7 +357,7 @@ class _PreviewOnlyNotice extends StatelessWidget {
         leading: Icon(Icons.offline_bolt_outlined, color: AppColors.brandGreen),
         title: Text('Private, offline assessment'),
         subtitle: Text(
-          'Kami evaluates the selected image on this device. Model validation '
+          'Chami evaluates the selected image on this device. Model validation '
           'is still in progress, so use the result as guidance only.',
         ),
       ),
@@ -664,7 +664,7 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
       setState(() {
         _saving = false;
         _saveError =
-            'Kami could not save this result. Nothing was added to History. '
+            'Chami could not save this result. Nothing was added to History. '
             'Check that the photo is still available, then try again.';
       });
     }
@@ -1117,7 +1117,7 @@ class _SaveStatusNotice extends StatelessWidget {
               : 'This on-device model result and its compressed image are available in History.'
         : errorMessage ??
               (saving
-                  ? 'Kami is creating a private compressed copy and saving the '
+                  ? 'Chami is creating a private compressed copy and saving the '
                         'record on this device.'
                   : isDemo
                   ? 'Save this Demo result to test local History. It will '
@@ -1261,10 +1261,10 @@ class _LowConfidenceWarning extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       origin == ResultOrigin.demo
-                          ? 'Kami is showing the tentative demo prediction so '
+                          ? 'Chami is showing the tentative demo prediction so '
                                 'you can decide whether to upload a clearer '
                                 'photo. It is not a confirmed assessment.'
-                          : 'Kami is showing the tentative on-device prediction '
+                          : 'Chami is showing the tentative on-device prediction '
                                 'so you can decide whether to upload a clearer '
                                 'photo. It is not a confirmed assessment.',
                     ),
@@ -1290,7 +1290,7 @@ class _WithheldShelfLifeNotice extends StatelessWidget {
         leading: Icon(Icons.schedule_outlined),
         title: Text('Shelf-life guidance not shown'),
         subtitle: Text(
-          'Kami does not provide shelf-life guidance for a low-confidence '
+          'Chami does not provide shelf-life guidance for a low-confidence '
           'result.',
         ),
       ),

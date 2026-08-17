@@ -274,19 +274,51 @@ final class FakeBatchRepository implements BatchRepository {
     required String targetBatchId,
     required DateTime updatedAt,
   }) async {
+    await moveScans(
+      scanIds: [scanId],
+      targetBatchId: targetBatchId,
+      updatedAt: updatedAt,
+    );
+  }
+
+  @override
+  Future<void> moveScans({
+    required Iterable<String> scanIds,
+    required String targetBatchId,
+    required DateTime updatedAt,
+  }) async {
     if (failCorrections) {
       throw StateError('Synthetic scan move failure.');
     }
-    final scan = await _scans.findActiveById(scanId);
+    final ids = scanIds.toSet().toList(growable: false);
+    if (ids.isEmpty) {
+      throw StateError('Synthetic empty move.');
+    }
     final target = _batches[targetBatchId];
-    if (scan == null ||
-        scan.batchId == null ||
+    final selected = [
+      for (final scanId in ids) await _scans.findActiveById(scanId),
+    ];
+    if (selected.any((scan) => scan == null) ||
         target == null ||
-        target.deletedAt != null ||
-        target.fruit != scan.fruit) {
+        target.deletedAt != null) {
       throw StateError('Synthetic incompatible move.');
     }
-    await _scans.moveToBatch(scanId, targetBatchId, updatedAt: updatedAt);
+    final scans = selected.cast<SavedScanRecord>();
+    if (scans.any(
+      (scan) =>
+          scan.batchId == null ||
+          scan.batchId == targetBatchId ||
+          scan.fruit != target.fruit,
+    )) {
+      throw StateError('Synthetic incompatible move.');
+    }
+    final sourceBatchId = scans.first.batchId!;
+    if (scans.any((scan) => scan.batchId != sourceBatchId)) {
+      throw StateError('Synthetic scans belong to different batches.');
+    }
+    for (final scan in scans) {
+      await _scans.moveToBatch(scan.id, targetBatchId, updatedAt: updatedAt);
+    }
     _changes.add(null);
   }
 

@@ -182,6 +182,29 @@ void main() {
     expect(await batches.findActiveById(_otherBatchId), isNull);
   });
 
+  test('moves multiple scans to one compatible batch atomically', () async {
+    final scans = FakeScanRecordRepository(
+      initialRecords: [
+        _scan(batchId: _batchId),
+        _scan(id: _secondScanId, batchId: _batchId),
+      ],
+    );
+    final batches = FakeBatchRepository(
+      scans,
+      initialBatches: [_batch(_batchId), _batch(_otherBatchId)],
+    );
+    addTearDown(scans.dispose);
+    addTearDown(batches.dispose);
+
+    await MoveScansToBatchUseCase(
+      batches,
+      () => _now,
+    ).execute(scanIds: [_scanId, _secondScanId], targetBatchId: _otherBatchId);
+
+    expect((await scans.findActiveById(_scanId))?.batchId, _otherBatchId);
+    expect((await scans.findActiveById(_secondScanId))?.batchId, _otherBatchId);
+  });
+
   test('changes the fruit type of an empty batch', () async {
     final scans = FakeScanRecordRepository();
     final batches = FakeBatchRepository(
@@ -222,7 +245,7 @@ void main() {
         isA<BatchActionException>().having(
           (error) => error.message,
           'message',
-          'Kami could not change the fruit type. The batch was not changed.',
+          'Chami could not change the fruit type. The batch was not changed.',
         ),
       ),
     );

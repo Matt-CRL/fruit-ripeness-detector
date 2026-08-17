@@ -18,6 +18,7 @@ abstract final class AppRoutes {
   static const profile = '/profile';
   static const shelfLifePreview = '/shelf-life-preview';
   static const addMultipleScansToBatch = '/saved-scans/add-to-batch';
+  static const moveMultipleScansToBatch = '/saved-scans/move-to-batch';
   static const batchCreateForScans = '/batches/new-for-scans';
 
   static String batchDetails(String batchId) => '/batches/$batchId';
@@ -39,14 +40,21 @@ abstract final class AppRoutes {
     String scanId, {
     bool fromAddScans = false,
     bool fromBatchScans = false,
+    String? addToBatchId,
   }) {
     final path = '/saved-scans/$scanId';
-    final context = fromAddScans
-        ? 'add-scans'
-        : fromBatchScans
-        ? 'batch-scans'
-        : null;
-    return context == null ? path : '$path?context=$context';
+    final queryParameters = <String, String>{};
+    if (fromAddScans) {
+      queryParameters['context'] = 'add-scans';
+      if (addToBatchId != null) {
+        queryParameters['batchId'] = addToBatchId;
+      }
+    } else if (fromBatchScans) {
+      queryParameters['context'] = 'batch-scans';
+    }
+    return queryParameters.isEmpty
+        ? path
+        : Uri(path: path, queryParameters: queryParameters).toString();
   }
 
   static String addToBatch(String scanId) =>

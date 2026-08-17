@@ -17,7 +17,7 @@ final class FlutterLiveCameraGateway implements LiveCameraGateway {
     } on Object catch (error) {
       throw LiveCameraFailure(
         LiveCameraFailureKind.initialization,
-        'Kami could not check the cameras on this device.',
+        'Chami could not check the cameras on this device.',
         error,
       );
     }
@@ -32,7 +32,7 @@ final class FlutterLiveCameraGateway implements LiveCameraGateway {
     if (rearCamera == null) {
       throw const LiveCameraFailure(
         LiveCameraFailureKind.noRearCamera,
-        'Kami could not find a rear camera on this device.',
+        'Chami could not find a rear camera on this device.',
       );
     }
 
@@ -64,7 +64,7 @@ final class FlutterLiveCameraGateway implements LiveCameraGateway {
       await controller.dispose();
       throw LiveCameraFailure(
         LiveCameraFailureKind.initialization,
-        'Kami could not start the rear camera.',
+        'Chami could not start the rear camera.',
         error,
       );
     }
@@ -135,7 +135,7 @@ final class _FlutterLiveCameraSession implements LiveCameraSession {
     } on Object catch (error) {
       throw LiveCameraFailure(
         LiveCameraFailureKind.streaming,
-        'Kami could not read frames from the rear camera.',
+        'Chami could not read frames from the rear camera.',
         error,
       );
     }
@@ -192,7 +192,7 @@ LiveCameraFailure _mapCameraException(
     ),
     'CameraAccessDeniedWithoutPrompt' => LiveCameraFailure(
       LiveCameraFailureKind.permissionPermanentlyDenied,
-      'Camera access is blocked. Enable it for Kami in Android Settings, then try again.',
+      'Camera access is blocked. Enable it for Chami in Android Settings, then try again.',
       error,
     ),
     'CameraAccessRestricted' => LiveCameraFailure(
@@ -205,8 +205,8 @@ LiveCameraFailure _mapCameraException(
           ? LiveCameraFailureKind.streaming
           : LiveCameraFailureKind.initialization,
       streaming
-          ? 'Kami could not continue reading camera frames.'
-          : 'Kami could not start the rear camera.',
+          ? 'Chami could not continue reading camera frames.'
+          : 'Chami could not start the rear camera.',
       error,
     ),
   };

@@ -1,6 +1,6 @@
-# Kami Android application
+# Chami Android application
 
-Kami is an Android-only Flutter application for offline image-based ripeness
+Chami is an Android-only Flutter application for offline image-based ripeness
 assessment of Carabao mango, Lakatan banana, and red papaya. It classifies one
 fruit image into Unripe, Ripe, or Overripe and supports local History, batches,
 orders, appearance preferences, and provisional shelf-life guidance.
@@ -26,7 +26,11 @@ part of this repository.
 ## Implemented
 
 - Material 3, Riverpod, go_router, the accessible green/yellow/orange theme,
-  and the custom transparent Kami launcher icon
+  the custom transparent Chami launcher icon, and cleaned theme-aware Chami
+  wordmark assets used by account entry and native Android launch resources;
+  Android 12+ keeps the centered icon with the text-only Chami name below,
+  while legacy launch backgrounds center a stacked icon/name composite without
+  an artificial delay
 - a full-width anchored, selection-only Create batch fruit-type dropdown with a
   themed, bounded popup that stays below the field when changing fruit
 - floating bottom pill navigation with transparent surrounding space so content
@@ -109,8 +113,14 @@ part of this repository.
   batch scan list previews three scans on
   the details page, remains tappable for
   details normally, and provides a checkbox-only Select/Cancel mode with
-  atomic bulk removal; recent-preview and full-list detail review show only
-  Remove from batch followed by Move to another batch
+  atomic bulk removal; selection mode places filled Remove beside an outlined
+  secondary Move to another batch action, with an atomic compatible multi-scan
+  move screen; recent-preview and full-list detail review show only Remove
+  from batch followed by Move to another batch, while the Add scans detail
+  context exposes a filled Add to Batch action only and assigns directly to
+  the current batch when its picker supplies a target; History-originated Add
+  to Batch still opens the batch chooser; destructive Delete empty batch text
+  uses the theme error color
 - confirmed saved-scan deletion with retained-image cleanup after the local
   soft-delete succeeds
 - one active local order per non-empty batch, with Pending create/edit/cancel,
@@ -181,7 +191,7 @@ low-confidence rejection is therefore disabled, and every real result warns
 that model validation is still in progress.
 
 The gallery picker does not request broad media/storage access. Canceling a
-scan clears only Kami's session reference and never deletes or changes the
+scan clears only Chami's session reference and never deletes or changes the
 user's source image. Saving creates a separate app-owned, orientation-corrected,
 metadata-omitting JPEG with a 1280-pixel maximum long edge and quality 82 under
 the application documents directory.
@@ -266,14 +276,16 @@ flutter run
 flutter build apk --debug --no-pub
 ```
 
-The last configured T-0132 APK was built at
-`build/app/outputs/flutter-apk/app-debug.apk` (236,429,148 bytes, built
-2026-08-17 19:51 +08:00). It was installed on a physical Android device and
-passed the single-device link/persist/isolate/pending-release/unlink/re-link
-acceptance flow. The emulator was unavailable for that build; two-device
-convergence and cloud/Guest conflict acceptance remain open. A later
-source-only push review removed the create-account auto-link branch; rebuild
-before release testing because that APK predates the fix.
+The latest configured T-0133 APK is
+`build/app/outputs/flutter-apk/app-debug.apk` (236,441,663 bytes, built
+2026-08-18 03:46 +08:00; SHA-256
+`D16285560D265548D38FA968C2D59A8C145B659903DEA93D0FB4A8D3141052CC`). It was
+installed and launched on `emulator-5554` without clearing data; the native
+icon-above-name cold start and dark account-entry wordmark were visually
+checked. The APK includes the create-account global eligibility/prompt fix.
+The single-device link/persist/isolate/pending-release/unlink/re-link flow has
+also passed on a physical Android device; two-device convergence and
+cloud/Guest conflict acceptance remain open.
 
 After an intentional Drift schema change, regenerate database code with:
 

@@ -91,7 +91,7 @@ final class CreateOrderUseCase {
       rethrow;
     } on Object {
       throw const OrderActionException(
-        'Kami could not create this local order. The batch was not changed.',
+        'Chami could not create this local order. The batch was not changed.',
       );
     }
   }
@@ -132,7 +132,7 @@ final class UpdatePendingOrderUseCase {
       rethrow;
     } on Object {
       throw const OrderActionException(
-        'Kami could not save these order changes. The current details were kept.',
+        'Chami could not save these order changes. The current details were kept.',
       );
     }
   }
@@ -149,7 +149,7 @@ final class CompleteOrderUseCase {
       return await _repository.complete(batchId: batchId, updatedAt: _utcNow());
     } on Object {
       throw const OrderActionException(
-        'Kami could not complete this order. It remains Pending.',
+        'Chami could not complete this order. It remains Pending.',
       );
     }
   }
@@ -166,7 +166,7 @@ final class CancelPendingOrderUseCase {
       await _repository.cancel(batchId: batchId, updatedAt: _utcNow());
     } on Object {
       throw const OrderActionException(
-        'Kami could not cancel this Pending order. Its current details were '
+        'Chami could not cancel this Pending order. Its current details were '
         'kept.',
       );
     }
