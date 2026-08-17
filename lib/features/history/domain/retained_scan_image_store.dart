@@ -12,6 +12,17 @@ abstract interface class RetainedScanImageStore {
     required String scanId,
   });
 
+  /// Copies an already-retained app-private JPEG to a new scan identity.
+  ///
+  /// This is used when a linked account's offline workspace is deliberately
+  /// detached into a fresh local-only Guest workspace. The copy keeps the
+  /// image local while preventing the old scan ID from being reused by a
+  /// later synchronization session.
+  Future<RetainedScanImage> copyToScan({
+    required String sourceRelativePath,
+    required String scanId,
+  });
+
   Future<String> resolvePath(String relativePath);
 
   Future<RetainedScanImage> storeDownloadedJpeg({

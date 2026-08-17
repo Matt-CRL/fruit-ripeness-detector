@@ -8,7 +8,10 @@ import 'package:kami/app/theme/theme_mode_controller.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/account/application/account_session_service.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
+import 'package:kami/features/auth/data/device_account_link_store.dart';
 import 'package:kami/features/auth/domain/auth_repository.dart';
+import 'package:kami/features/auth/data/offline_workspace_link_service.dart';
+import 'package:kami/features/auth/presentation/development_photo_consent_dialog.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 import 'package:kami/features/sync/application/sync_coordinator.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
@@ -136,6 +139,117 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _linkThisDevice() async {
+    final account = ref.read(currentAccountProvider);
+    if (account == null) return;
+    setState(() => _accountActionRunning = true);
+    var linkAccepted = false;
+    try {
+      final service = ref.read(offlineWorkspaceLinkServiceProvider);
+      final releaseReady = await service.retryPendingRelease(
+        authenticated: true,
+      );
+      if (!releaseReady) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'A previous unlink is still waiting for cloud confirmation. '
+                'Try again when you are online.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      final eligibility = await service.checkEligibility(account.id);
+      if (eligibility != WorkspaceLinkEligibility.eligible) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                eligibility == WorkspaceLinkEligibility.accountLinkedElsewhere
+                    ? 'This account is already linked to another device.'
+                    : 'This device cannot be linked right now. Check your '
+                          'connection and try again.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      final result = await service.link(account.id);
+      if (result != WorkspaceLinkResult.linked) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This device could not be linked.')),
+          );
+        }
+        return;
+      }
+      await ref.read(deviceLinkedAccountIdProvider.notifier).link(account.id);
+      linkAccepted = true;
+      final local = ref.read(localSyncStoreProvider);
+      final linkStore = ref.read(deviceAccountLinkStoreProvider);
+      final workspaceId = await linkStore.readOrCreateWorkspaceId();
+      final generation = await linkStore.readWorkspaceGeneration();
+      final consent =
+          await local.photoConsentForAccount(account.id) ??
+          (mounted ? await requestDevelopmentPhotoConsent(context) : null);
+      if (consent == null) {
+        await service.release(authenticated: true);
+        await ref
+            .read(deviceLinkedAccountIdProvider.notifier)
+            .clearIfMatches(account.id);
+        return;
+      }
+      final reassociated = await local.reassociateDetachedGuestData(
+        ownerId: account.id,
+        workspaceId: workspaceId,
+        generation: generation > 0 ? generation - 1 : generation,
+        imageUploadConsent: consent,
+      );
+      if (!reassociated && await local.hasActiveGuestData()) {
+        await local.claimGuestData(
+          ownerId: account.id,
+          imageUploadConsent: consent,
+        );
+      } else {
+        await local.setImageUploadConsent(
+          ownerId: account.id,
+          consent: consent,
+          authenticated: true,
+        );
+      }
+      await local.saveOfflineWorkspaceState(
+        workspaceId: workspaceId,
+        installationId: await linkStore.readOrCreateInstallationId(),
+        generation: generation,
+        pendingRelease: false,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This device is now linked.')),
+        );
+      }
+    } on Object {
+      if (linkAccepted) {
+        final service = ref.read(offlineWorkspaceLinkServiceProvider);
+        await service.release(authenticated: true);
+        await ref
+            .read(deviceLinkedAccountIdProvider.notifier)
+            .clearIfMatches(account.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This device could not be linked.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _accountActionRunning = false);
+    }
+  }
+
   Future<void> _setPhotoConsent(bool consent) async {
     final account = ref.read(currentAccountProvider);
     if (account == null) return;
@@ -178,8 +292,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _editDisplayName() async {
     final account = ref.read(currentAccountProvider);
     if (account == null) return;
-    final controller = TextEditingController(text: account.displayName ?? '');
     final formKey = GlobalKey<FormState>();
+    String? enteredName;
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -187,10 +301,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         content: Form(
           key: formKey,
           child: TextFormField(
-            controller: controller,
+            initialValue: account.displayName ?? '',
             autofocus: true,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(labelText: 'Display name'),
+            onSaved: (value) => enteredName = value?.trim(),
             validator: (value) {
               final length = (value?.trim() ?? '').runes.length;
               return length < 2 || length > 50
@@ -206,8 +321,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           FilledButton(
             onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.of(dialogContext).pop(controller.text.trim());
+              final form = formKey.currentState;
+              if (form?.validate() ?? false) {
+                form!.save();
+                Navigator.of(dialogContext).pop(enteredName);
               }
             },
             child: const Text('Save'),
@@ -215,7 +332,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-    controller.dispose();
     if (value == null || !mounted) return;
     setState(() => _accountActionRunning = true);
     try {
@@ -223,8 +339,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ref.invalidate(currentAccountProvider);
     } on AccountAuthException catch (error) {
       if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } on Object {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message)),
+          const SnackBar(
+            content: Text(
+              'The display name could not be updated. Please try again.',
+            ),
+          ),
         );
       }
     } finally {
@@ -379,11 +505,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _detachLinkedWorkspace() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Keep offline data on this device?'),
+        content: const Text(
+          'Kami will unlink this device and keep your scans, batches, orders, '
+          'and saved photos as local-only Guest data. The detached copy will '
+          'not synchronize to the old account, and the cloud account itself '
+          'will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Keep data and unlink'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final wasAuthenticated = ref.read(currentAccountProvider) != null;
+    setState(() => _accountActionRunning = true);
+    try {
+      await ref.read(accountSessionServiceProvider).detachLinkedWorkspace();
+      if (!mounted) return;
+      setState(() => _accountActionRunning = false);
+      if (wasAuthenticated) {
+        context.go(AppRoutes.accountChoice);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Offline data is now kept as local Guest data.'),
+          ),
+        );
+      }
+    } on AccountSessionException catch (error) {
+      if (mounted) {
+        setState(() => _accountActionRunning = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => _accountActionRunning = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Offline data could not be detached safely. Please try again.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final account = ref.watch(currentAccountProvider);
+    final linkedOwnerId = ref.watch(deviceLinkedAccountIdProvider);
     if (account != null) {
       return _buildAccountProfile(
         context,
@@ -392,6 +580,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         accountDisplayName: account.displayName,
         colorScheme: colorScheme,
         themeMode: themeMode,
+        isLinkedWorkspace: linkedOwnerId == account.id,
       );
     }
 
@@ -439,6 +628,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ),
+          if (linkedOwnerId != null) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Offline workspace',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                leading: Icon(Icons.link_off, color: colorScheme.primary),
+                title: const Text('Keep data on this device'),
+                subtitle: const Text(
+                  'Detach the linked workspace if you can no longer use that '
+                  'account. Data stays local and is not deleted.',
+                ),
+                onTap: _accountActionRunning ? null : _detachLinkedWorkspace,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
@@ -541,6 +749,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required String? accountDisplayName,
     required ColorScheme colorScheme,
     required ThemeMode themeMode,
+    required bool isLinkedWorkspace,
   }) {
     final status = ref.watch(syncStatusProvider);
     final settings = ref.watch(syncSettingsProvider).value;
@@ -550,9 +759,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       SyncStatus.idle => 'Ready to synchronize',
       SyncStatus.syncing => 'Synchronizing…',
       SyncStatus.upToDate => 'Up to date',
-      SyncStatus.failed => status.failureCategory == SyncFailureCategory.record
-          ? 'Some saved items need attention'
-          : 'Sync needs attention',
+      SyncStatus.failed =>
+        status.failureCategory == SyncFailureCategory.record
+            ? 'Some saved items need attention'
+            : 'Sync needs attention',
       SyncStatus.conflict => 'Up to date with a resolved conflict',
     };
     return Scaffold(
@@ -572,15 +782,63 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 backgroundColor: colorScheme.primaryContainer,
                 child: Icon(Icons.person_outline, color: colorScheme.primary),
               ),
-              title: Text(accountDisplayName ?? 'Kami account'),
-              subtitle: Text(accountEmail),
-              trailing: IconButton(
-                tooltip: 'Edit display name',
-                onPressed: _accountActionRunning ? null : _editDisplayName,
-                icon: const Icon(Icons.edit_outlined),
+              title: Row(
+                children: [
+                  Flexible(child: Text(accountDisplayName ?? 'Kami account')),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Edit display name',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    onPressed: _accountActionRunning ? null : _editDisplayName,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
               ),
+              subtitle: Text(accountEmail),
             ),
           ),
+          if (isLinkedWorkspace) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Offline workspace',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                leading: Icon(Icons.link_off, color: colorScheme.primary),
+                title: const Text('Unlink this device'),
+                subtitle: const Text(
+                  'Keep your offline data here as local-only Guest data.',
+                ),
+                onTap: _accountActionRunning ? null : _detachLinkedWorkspace,
+              ),
+            ),
+          ],
+          if (!isLinkedWorkspace &&
+              ref.watch(deviceLinkedAccountIdProvider) == null) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Offline workspace',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                leading: Icon(Icons.link_outlined, color: colorScheme.primary),
+                title: const Text('Link this device'),
+                subtitle: const Text(
+                  'Keep local Guest data available when you sign out of this account.',
+                ),
+                onTap: _accountActionRunning ? null : _linkThisDevice,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Text(
             'Synchronization',
@@ -626,9 +884,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               children: [
                 SwitchListTile(
-                  value: settings?.consentAccountId == accountId
-                      ? settings?.imageUploadConsent ?? false
-                      : false,
+                  value: settings?.imageUploadConsent ?? false,
                   onChanged: _accountActionRunning ? null : _setPhotoConsent,
                   secondary: const Icon(Icons.photo_outlined),
                   title: const Text('Cloud photo backup'),

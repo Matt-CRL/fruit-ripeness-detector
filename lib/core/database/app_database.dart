@@ -176,10 +176,9 @@ class Orders extends Table {
   ];
 }
 
-@DataClassName('AppSettingsRow')
-class AppSettings extends Table {
-  late final IntColumn id = integer().withDefault(const Constant(1))();
-  late final TextColumn consentAccountId = text().nullable()();
+@DataClassName('AccountSyncSettingsRow')
+class AccountSyncSettings extends Table {
+  late final TextColumn ownerId = text()();
   late final BoolColumn imageUploadConsent = boolean().nullable()();
   late final TextColumn consentVersion = text().nullable()();
   late final DateTimeColumn lastSuccessfulSyncAt = dateTime().nullable()();
@@ -194,33 +193,72 @@ class AppSettings extends Table {
       .withDefault(const Constant(0))();
 
   @override
-  Set<Column<Object>> get primaryKey => {id};
+  Set<Column<Object>> get primaryKey => {ownerId};
 
   @override
   List<String> get customConstraints => [
-    'CHECK (id = 1)',
+    'CHECK (length(trim(owner_id)) > 0)',
     '''CHECK (
-      (consent_account_id IS NULL
-        AND image_upload_consent IS NULL
-        AND consent_version IS NULL)
+      (image_upload_consent IS NULL AND consent_version IS NULL)
       OR
-      (consent_account_id IS NOT NULL
-        AND length(trim(consent_account_id)) > 0
-        AND image_upload_consent IS NOT NULL
-        AND consent_version IS NOT NULL
+      (image_upload_consent IS NOT NULL
         AND length(trim(consent_version)) > 0)
     )''',
   ];
 }
 
-@DriftDatabase(tables: [Batches, ScanRecords, Orders, AppSettings])
+@DataClassName('OfflineWorkspaceStateRow')
+class OfflineWorkspaceStates extends Table {
+  late final TextColumn id = text()();
+  late final TextColumn workspaceId = text()();
+  late final TextColumn installationId = text()();
+  late final IntColumn generation = integer().withDefault(const Constant(0))();
+  late final BoolColumn pendingRelease = boolean().withDefault(
+    const Constant(false),
+  )();
+  late final DateTimeColumn updatedAt = dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('DetachedEntityOriginRow')
+@TableIndex(
+  name: 'detached_entity_origins_workspace_idx',
+  columns: {#workspaceId, #generation},
+)
+class DetachedEntityOrigins extends Table {
+  late final TextColumn id = text()();
+  late final TextColumn workspaceId = text()();
+  late final IntColumn generation = integer()();
+  late final TextColumn entityType = text()();
+  late final TextColumn guestEntityId = text()();
+  late final TextColumn originalOwnerId = text()();
+  late final TextColumn originalEntityId = text()();
+  late final IntColumn originalRemoteRevision = integer()();
+  late final DateTimeColumn detachedAt = dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DriftDatabase(
+  tables: [
+    Batches,
+    ScanRecords,
+    Orders,
+    AccountSyncSettings,
+    OfflineWorkspaceStates,
+    DetachedEntityOrigins,
+  ],
+)
 final class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   AppDatabase.defaults() : super(driftDatabase(name: 'kami'));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -272,11 +310,21 @@ final class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(orders, orders.remoteRevision);
         }
         if (tableNames.contains('app_settings')) {
-          await migrator.addColumn(appSettings, appSettings.lastSyncAttemptAt);
-          await migrator.addColumn(appSettings, appSettings.syncCursorAt);
-          await migrator.addColumn(appSettings, appSettings.lastSyncErrorCode);
-          await migrator.addColumn(appSettings, appSettings.syncState);
-          await migrator.addColumn(appSettings, appSettings.remoteRevision);
+          await customStatement(
+            'ALTER TABLE app_settings ADD COLUMN last_sync_attempt_at INTEGER',
+          );
+          await customStatement(
+            'ALTER TABLE app_settings ADD COLUMN sync_cursor_at INTEGER',
+          );
+          await customStatement(
+            'ALTER TABLE app_settings ADD COLUMN last_sync_error_code TEXT',
+          );
+          await customStatement(
+            "ALTER TABLE app_settings ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'local_only'",
+          );
+          await customStatement(
+            'ALTER TABLE app_settings ADD COLUMN remote_revision INTEGER NOT NULL DEFAULT 0',
+          );
         }
       }
       if (from < 6) {
@@ -287,8 +335,47 @@ final class AppDatabase extends _$AppDatabase {
             .map((row) => row.read<String>('name'))
             .toSet();
         if (tableNames.contains('app_settings')) {
-          await migrator.addColumn(appSettings, appSettings.consentAccountId);
+          await customStatement(
+            'ALTER TABLE app_settings ADD COLUMN consent_account_id TEXT',
+          );
         }
+      }
+      if (from < 7) {
+        await migrator.createTable(accountSyncSettings);
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (tableNames.contains('app_settings')) {
+          final legacy = await customSelect('''
+            SELECT consent_account_id
+            FROM app_settings
+            WHERE id = 1
+            ''').getSingleOrNull();
+          final legacyOwner = legacy?.data['consent_account_id'];
+          if (legacyOwner is String && legacyOwner.trim().isNotEmpty) {
+            await customStatement('''
+              INSERT INTO account_sync_settings (
+                owner_id, image_upload_consent, consent_version,
+                last_successful_sync_at, last_sync_attempt_at, sync_cursor_at,
+                last_sync_error_code, sync_state, remote_revision
+              )
+              SELECT consent_account_id, image_upload_consent, consent_version,
+                     last_successful_sync_at, last_sync_attempt_at,
+                     sync_cursor_at, last_sync_error_code, sync_state,
+                     remote_revision
+              FROM app_settings
+              WHERE id = 1 AND consent_account_id IS NOT NULL
+              ''');
+          }
+          await customStatement('DROP TABLE app_settings');
+        }
+      }
+      if (from < 8) {
+        await migrator.createTable(offlineWorkspaceStates);
+        await migrator.createTable(detachedEntityOrigins);
       }
     },
     beforeOpen: (details) async {

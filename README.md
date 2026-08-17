@@ -54,9 +54,10 @@ part of this repository.
 - deterministic fake classifier/advisor test boundaries with explicit Demo
   labeling
 - low-confidence, rescan-cancel, and flat repeated-rescan navigation behavior
-- Drift/SQLite schema version six for scans, batches, orders, and app settings,
-  including composite indexes for filtered keyset pages, remote revisions,
-  separate metadata/photo synchronization states, and safe pull cursors
+- Drift/SQLite schema version eight for scans, batches, orders, workspace state,
+  detached provenance, and account-scoped synchronization settings, including
+  composite indexes for filtered keyset pages, remote revisions, separate
+  metadata/photo synchronization states, and safe pull cursors
 - repository-level batch/order validation and replaceable providers
 - app-private retained history JPEGs using `flutter_image_compress` and
   `path_provider`
@@ -129,18 +130,23 @@ part of this repository.
   required editable display names, encrypted session restoration, per-account
   onboarding, and non-enumerating authentication errors when public Supabase
   configuration is supplied
-- device-linked, all-or-nothing claiming of active Guest records; a different
-  account never absorbs that device's reserved Guest data, while the linked
-  account claims later Guest records automatically
+- device-linked, all-or-nothing claiming of active Guest records; the linked
+  account owns the persistent offline workspace after sign-out, while a
+  different authenticated account gets an isolated temporary workspace and
+  never absorbs or exposes the linked data; later Guest records use the linked
+  owner automatically; Supabase globally enforces one account/workspace link,
+  with generation-scoped prompts, secure revocation, guarded Profile retry, and
+  safe pending-release recovery
 - foreground-only, durable metadata synchronization with UUID idempotency,
   revision conflicts, dependency-ordered push, paginated overlapping pull, and
   startup/resume/local-write/refresh/manual-retry triggers
 - private retained-photo upload and automatic cross-device retrieval,
   deterministic object keys, independent image states, consent revocation, and
   retryable object deletion
-- authenticated Profile sync status and controls, safe
-  synchronized sign-out with an explicit destructive-discard alternative, and
-  password-reauthenticated account deletion
+- authenticated Profile sync status and controls; linked-workspace sign-out is
+  best-effort and retains local data, while temporary-account sign-out keeps an
+  explicit destructive-discard alternative; password-reauthenticated account
+  deletion remains available
 - version-controlled Supabase migrations, pgTAP tests, private Storage/RLS
   policies, 30-day tombstone cleanup, and an authenticated `delete-account`
   Edge Function under `supabase/`
@@ -192,8 +198,14 @@ the application documents directory.
 - configured hosted app validation and two-device validation; the T-0123 local
   database, RLS/Storage policy, and lint checks passed in Docker, and its
   reviewed initial migration plus authenticated deletion function are deployed
-  to the private Singapore development project. The T-0124 follow-up migration
-  still requires a local reset/pgTAP/lint run and hosted deployment approval.
+  to the private Singapore development project. The T-0124 follow-up and
+  T-0132 registry migrations are deployed; local reset/pgTAP/lint still require
+  Docker. Two-device and cloud/Guest conflict acceptance remain pending.
+- deliberate account unlinking and lost-account local recovery; Profile can
+  detach a fresh local-only copy with fresh IDs, retained photos, cleared
+  remote identifiers, and a cleared device link; single-device unlink/re-link
+  and pending-release recovery passed physical-device acceptance, while
+  lost-account cloud release remains pending
 
 Missing cloud configuration intentionally leaves the complete Guest workflow
 available. Account and sync controls appear only for an authenticated account.
@@ -230,7 +242,8 @@ npm install
 
 The exact project-local Supabase CLI is invoked through `npx`. Docker Desktop
 must be running before starting or resetting the local Supabase stack. The
-T-0124 follow-up migration has not yet been applied locally or deployed:
+T-0124 follow-up and T-0132 registry migrations are deployed to the configured
+hosted project, but still need local reset/pgTAP/lint verification:
 
 ```powershell
 npx supabase start
@@ -253,10 +266,14 @@ flutter run
 flutter build apk --debug --no-pub
 ```
 
-The latest configured T-0124 APK was built at
-`build/app/outputs/flutter-apk/app-debug.apk`, installed successfully, and
-launched on `emulator-5554`. Feature-specific runtime behavior still requires
-manual acceptance testing.
+The last configured T-0132 APK was built at
+`build/app/outputs/flutter-apk/app-debug.apk` (236,429,148 bytes, built
+2026-08-17 19:51 +08:00). It was installed on a physical Android device and
+passed the single-device link/persist/isolate/pending-release/unlink/re-link
+acceptance flow. The emulator was unavailable for that build; two-device
+convergence and cloud/Guest conflict acceptance remain open. A later
+source-only push review removed the create-account auto-link branch; rebuild
+before release testing because that APK predates the fix.
 
 After an intentional Drift schema change, regenerate database code with:
 
@@ -269,5 +286,6 @@ the Drift generator workflow.
 
 The Android development identifier is `ph.fruitripeness.kami`. Minimum API 24
 and compile/target API 36 are the verified scaffold baseline. Release signing
-still uses debug keys and is not production-ready. Live Scan is verified on the
-API 36 emulator but still requires representative physical-device validation.
+still uses debug keys and is not production-ready. Live Scan has passed the
+physical-device smoke pass; representative-device performance, saved-frame,
+heat, memory, and battery validation remain separate acceptance work.

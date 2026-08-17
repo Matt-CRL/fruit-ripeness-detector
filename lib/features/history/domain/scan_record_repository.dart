@@ -12,6 +12,12 @@ abstract interface class ScanRecordRepository {
 
   Stream<List<SavedScanRecord>> watchActive();
 
+  /// Emits a lightweight revision whenever active History rows change.
+  ///
+  /// This is intentionally separate from [watchActive] so paged History can
+  /// refresh without loading every saved scan into memory.
+  Stream<int> watchActiveRevision();
+
   Future<SavedScanPage> fetchPage({
     required SavedScanQuery query,
     PageCursor? cursor,

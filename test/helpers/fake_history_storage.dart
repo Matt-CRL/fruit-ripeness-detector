@@ -129,6 +129,15 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
   }
 
   @override
+  Stream<int> watchActiveRevision() async* {
+    if (failReads) {
+      throw StateError('Synthetic database read failure.');
+    }
+    yield _revision();
+    yield* _changes.stream.map((_) => _revision());
+  }
+
+  @override
   Future<SavedScanPage> fetchPage({
     required SavedScanQuery query,
     PageCursor? cursor,
@@ -245,6 +254,17 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
 
   void _emit() => _changes.add(_activeRecords());
 
+  int _revision() {
+    final records = _activeRecords();
+    final latest = records.fold<DateTime?>(
+      null,
+      (current, record) => current == null || record.updatedAt.isAfter(current)
+          ? record.updatedAt
+          : current,
+    );
+    return Object.hash(records.length, latest?.microsecondsSinceEpoch);
+  }
+
   List<SavedScanRecord> _activeRecords() {
     final values = _records.values
         .where((record) => record.deletedAt == null)
@@ -321,6 +341,19 @@ final class FakeRetainedScanImageStore implements RetainedScanImageStore {
       throw const RetainedScanImageException('Synthetic compression failure.');
     }
     return RetainedScanImage(relativePath: 'history_images/$scanId.jpg');
+  }
+
+  @override
+  Future<RetainedScanImage> copyToScan({
+    required String sourceRelativePath,
+    required String scanId,
+  }) async {
+    if (failRetain) {
+      throw const RetainedScanImageException('Synthetic copy failure.');
+    }
+    final path = 'history_images/$scanId.jpg';
+    retainedPaths.add(path);
+    return RetainedScanImage(relativePath: path);
   }
 
   @override

@@ -123,7 +123,6 @@ final class PullPage {
 
 final class LocalSyncSettings {
   const LocalSyncSettings({
-    this.consentAccountId,
     this.imageUploadConsent,
     this.consentVersion,
     this.lastSuccessfulSyncAt,
@@ -134,7 +133,6 @@ final class LocalSyncSettings {
     this.syncState = LocalSyncState.localOnly,
   });
 
-  final String? consentAccountId;
   final bool? imageUploadConsent;
   final String? consentVersion;
   final DateTime? lastSuccessfulSyncAt;

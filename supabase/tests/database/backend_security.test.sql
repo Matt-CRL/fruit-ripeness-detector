@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(29);
 
 insert into auth.users (
   id,
@@ -323,7 +323,91 @@ select is(
   'a second account cannot list the first account image object'
 );
 
+select is(
+  public.claim_offline_workspace_link(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    '22222222-2222-4222-8222-222222222222',
+    'owner-two-revocation-token'
+  ),
+  'linked',
+  'an account can claim an unlinked offline workspace'
+);
+
+select is(
+  public.offline_workspace_link_status(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  ),
+  'local_already_linked',
+  'the owner sees its own workspace link'
+);
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}',
+  true
+);
+
+select is(
+  public.offline_workspace_link_status(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  ),
+  'workspace_linked',
+  'an unrelated account cannot inspect the linked workspace owner'
+);
+
+select is(
+  public.claim_offline_workspace_link(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    '11111111-1111-4111-8111-111111111111',
+    'owner-one-revocation-token'
+  ),
+  'workspace_linked',
+  'a linked workspace cannot be claimed by another account'
+);
+
+select is(
+  public.claim_offline_workspace_link(
+    'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    '11111111-1111-4111-8111-111111111111',
+    'owner-one-revocation-token'
+  ),
+  'linked',
+  'an account can claim a second unlinked workspace when it has no link'
+);
+
+select is(
+  public.offline_workspace_link_status(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  ),
+  'linked_elsewhere',
+  'an account with a link cannot claim another workspace'
+);
+
+select is(
+  public.release_offline_workspace_link(
+    'ffffffff-ffff-4fff-8fff-ffffffffffff'
+  ),
+  true,
+  'an authenticated owner can release its workspace link'
+);
+
+select is(
+  public.offline_workspace_link_status(
+    'ffffffff-ffff-4fff-8fff-ffffffffffff'
+  ),
+  'eligible',
+  'released workspaces become eligible again'
+);
+
 set local role anon;
+select is(
+  public.release_offline_workspace_link_with_token(
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    'wrong-revocation-token'
+  ),
+  false,
+  'an invalid recovery token cannot release a workspace'
+);
 select throws_ok(
   $$ select count(*) from public.batches $$,
   '42501',

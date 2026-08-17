@@ -5,6 +5,7 @@ import 'package:kami/features/history/data/app_private_retained_scan_image_store
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 
 const _scanId = '11111111-1111-4111-8111-111111111111';
+const _copiedScanId = '22222222-2222-4222-8222-222222222222';
 
 void main() {
   late Directory root;
@@ -51,6 +52,22 @@ void main() {
   test('rejects paths outside the owned history directory', () async {
     await expectLater(store.resolvePath('../outside.jpg'), throwsArgumentError);
     await expectLater(store.remove('other/$_scanId.jpg'), throwsArgumentError);
+  });
+
+  test('copies an existing retained image to a fresh scan identity', () async {
+    final retained = await store.retain(
+      sourcePath: source.path,
+      scanId: _scanId,
+    );
+
+    final copied = await store.copyToScan(
+      sourceRelativePath: retained.relativePath,
+      scanId: _copiedScanId,
+    );
+    final copiedFile = File(await store.resolvePath(copied.relativePath));
+
+    expect(copied.relativePath, 'history_images/$_copiedScanId.jpg');
+    expect(await copiedFile.readAsBytes(), [8, 2]);
   });
 
   test('compression failure removes only the pending output', () async {

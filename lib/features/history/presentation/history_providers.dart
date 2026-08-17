@@ -7,6 +7,10 @@ final activeScanRecordsProvider = StreamProvider<List<SavedScanRecord>>((ref) {
   return ref.watch(scanRecordRepositoryProvider).watchActive();
 });
 
+final activeScanRevisionProvider = StreamProvider<int>((ref) {
+  return ref.watch(scanRecordRepositoryProvider).watchActiveRevision();
+});
+
 final savedScanRecordProvider = StreamProvider.autoDispose
     .family<SavedScanRecord?, String>((ref, scanId) {
       return ref.watch(scanRecordRepositoryProvider).watchActiveById(scanId);

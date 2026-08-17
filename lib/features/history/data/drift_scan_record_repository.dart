@@ -107,6 +107,23 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   }
 
   @override
+  Stream<int> watchActiveRevision() {
+    final count = _database.scanRecords.id.count();
+    final latestUpdate = _database.scanRecords.updatedAt.max();
+    final query = _database.selectOnly(_database.scanRecords)
+      ..addColumns([count, latestUpdate])
+      ..where(
+        _database.scanRecords.deletedAt.isNull() &
+            _ownerPredicate(_database.scanRecords),
+      );
+    return query.watchSingle().map((row) {
+      final activeCount = row.read(count) ?? 0;
+      final updatedAt = row.read(latestUpdate);
+      return Object.hash(activeCount, updatedAt?.microsecondsSinceEpoch);
+    });
+  }
+
+  @override
   Future<SavedScanPage> fetchPage({
     required SavedScanQuery query,
     PageCursor? cursor,

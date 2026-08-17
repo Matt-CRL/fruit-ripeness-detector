@@ -38,7 +38,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         appDatabaseProvider.overrideWithValue(database),
-        currentOwnerIdProvider.overrideWithValue(_ownerId),
+        authenticatedAccountIdProvider.overrideWithValue(_ownerId),
         syncGatewayProvider.overrideWithValue(gateway),
         retainedScanImageStoreProvider.overrideWithValue(
           FakeRetainedScanImageStore(),
@@ -134,9 +134,9 @@ void main() {
       '${SyncTable.scanRecords.name}:$_scanId',
       '${SyncTable.scanRecords.name}:$_secondScanId',
     ]);
-    final rows = await (database.select(database.scanRecords)
-          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-        .get();
+    final rows = await (database.select(
+      database.scanRecords,
+    )..orderBy([(row) => OrderingTerm.asc(row.createdAt)])).get();
     expect(rows.first.syncState, 'failed');
     expect(rows.last.syncState, 'synchronized');
     expect(rows.last.remoteRevision, 1);

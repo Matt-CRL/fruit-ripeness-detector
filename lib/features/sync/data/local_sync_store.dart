@@ -5,6 +5,7 @@ import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
 import 'package:kami/core/persistence/persistence_codecs.dart';
+import 'package:kami/features/auth/domain/offline_workspace_models.dart';
 import 'package:kami/features/sync/domain/sync_models.dart';
 
 const developmentConsentVersion = 'draft-development-v1';
@@ -15,6 +16,70 @@ final localSyncStoreProvider = Provider<LocalSyncStore>((ref) {
 
 final class LocalSyncStore {
   const LocalSyncStore(this._database);
+
+  Future<void> saveOfflineWorkspaceState({
+    required String workspaceId,
+    required String installationId,
+    required int generation,
+    required bool pendingRelease,
+  }) async {
+    await _database
+        .into(_database.offlineWorkspaceStates)
+        .insertOnConflictUpdate(
+          OfflineWorkspaceStatesCompanion.insert(
+            id: 'default',
+            workspaceId: workspaceId,
+            installationId: installationId,
+            generation: Value(generation),
+            pendingRelease: Value(pendingRelease),
+            updatedAt: DateTime.now().toUtc(),
+          ),
+        );
+  }
+
+  Future<OfflineWorkspaceState?> readOfflineWorkspaceState() async {
+    final row = await (_database.select(
+      _database.offlineWorkspaceStates,
+    )..where((row) => row.id.equals('default'))).getSingleOrNull();
+    if (row == null) return null;
+    return OfflineWorkspaceState(
+      workspaceId: row.workspaceId,
+      installationId: row.installationId,
+      generation: row.generation,
+      pendingRelease: row.pendingRelease,
+      updatedAt: row.updatedAt,
+    );
+  }
+
+  Future<List<DetachedEntityOrigin>> readDetachedEntityOrigins({
+    required String workspaceId,
+    required int generation,
+    String? originalOwnerId,
+  }) async {
+    final rows = await (_database.select(
+      _database.detachedEntityOrigins,
+    )..where(
+          (row) =>
+              row.workspaceId.equals(workspaceId) &
+              row.generation.equals(generation) &
+              (originalOwnerId == null
+                  ? const Constant(true)
+                  : row.originalOwnerId.equals(originalOwnerId)),
+        )).get();
+    return [
+      for (final row in rows)
+        DetachedEntityOrigin(
+          workspaceId: row.workspaceId,
+          generation: row.generation,
+          entityType: row.entityType,
+          guestEntityId: row.guestEntityId,
+          originalOwnerId: row.originalOwnerId,
+          originalEntityId: row.originalEntityId,
+          originalRemoteRevision: row.originalRemoteRevision,
+          detachedAt: row.detachedAt,
+        ),
+    ];
+  }
 
   final AppDatabase _database;
 
@@ -96,17 +161,230 @@ final class LocalSyncStore {
         OrdersCompanion(ownerId: Value(ownerId), syncState: Value(pending)),
       );
       await _database
-          .into(_database.appSettings)
+          .into(_database.accountSyncSettings)
           .insertOnConflictUpdate(
-            AppSettingsCompanion.insert(
-              id: const Value(1),
-              consentAccountId: Value(ownerId),
+            AccountSyncSettingsCompanion.insert(
+              ownerId: ownerId,
               imageUploadConsent: Value(imageUploadConsent),
               consentVersion: Value(consentVersion),
               syncState: Value(pending),
             ),
           );
     });
+  }
+
+  /// Reattaches detached rows to their original cloud identities when the
+  /// former owner links the same workspace again. Rows created after detach
+  /// remain new records and are claimed normally.
+  Future<bool> reassociateDetachedGuestData({
+    required String ownerId,
+    required String workspaceId,
+    required int generation,
+    required bool imageUploadConsent,
+    String consentVersion = developmentConsentVersion,
+  }) async {
+    final origins =
+        await (_database.select(_database.detachedEntityOrigins)..where(
+              (row) =>
+                  row.workspaceId.equals(workspaceId) &
+                  row.generation.equals(generation) &
+                  row.originalOwnerId.equals(ownerId),
+            ))
+            .get();
+    if (origins.isEmpty) return false;
+
+    final batches = await (_database.select(
+      _database.batches,
+    )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).get();
+    final scans = await (_database.select(
+      _database.scanRecords,
+    )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).get();
+    final orders = await (_database.select(
+      _database.orders,
+    )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).get();
+    final originByGuestId = {
+      for (final origin in origins) origin.guestEntityId: origin,
+    };
+    final batchIdMap = <String, String>{};
+    final scanIdMap = <String, String>{};
+    final orderIdMap = <String, String>{};
+    for (final row in batches) {
+      final origin = originByGuestId[row.id];
+      if (origin?.entityType == 'batch') {
+        batchIdMap[row.id] = origin!.originalEntityId;
+      }
+    }
+    for (final row in scans) {
+      final origin = originByGuestId[row.id];
+      if (origin?.entityType == 'scan') {
+        scanIdMap[row.id] = origin!.originalEntityId;
+      }
+    }
+    for (final row in orders) {
+      final origin = originByGuestId[row.id];
+      if (origin?.entityType == 'order') {
+        orderIdMap[row.id] = origin!.originalEntityId;
+      }
+    }
+
+    final existingBatches = await (_database.select(
+      _database.batches,
+    )..where((row) => row.ownerId.equals(ownerId))).get();
+    final existingScans = await (_database.select(
+      _database.scanRecords,
+    )..where((row) => row.ownerId.equals(ownerId))).get();
+    final existingOrders = await (_database.select(
+      _database.orders,
+    )..where((row) => row.ownerId.equals(ownerId))).get();
+    if (existingBatches.any((row) => batchIdMap.values.contains(row.id)) ||
+        existingScans.any((row) => scanIdMap.values.contains(row.id)) ||
+        existingOrders.any((row) => orderIdMap.values.contains(row.id))) {
+      throw StateError(
+        'The original account already has local records. Resolve the '
+        'account session before re-linking this workspace.',
+      );
+    }
+
+    final pending = PersistenceCodecs.encodeSyncState(LocalSyncState.pending);
+    final imageState = PersistenceCodecs.encodeImageSyncState(
+      imageUploadConsent
+          ? ImageSyncState.pendingUpload
+          : ImageSyncState.localOnly,
+    );
+    await _database.transaction(() async {
+      for (final row in batches) {
+        final newId = batchIdMap[row.id];
+        if (newId == null) continue;
+        final origin = originByGuestId[row.id]!;
+        await _database
+            .into(_database.batches)
+            .insert(
+              BatchesCompanion.insert(
+                id: newId,
+                ownerId: Value(ownerId),
+                name: row.name,
+                fruitType: row.fruitType,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+                syncState: Value(pending),
+                remoteRevision: Value(origin.originalRemoteRevision),
+              ),
+            );
+      }
+      for (final row in scans) {
+        final newId = scanIdMap[row.id];
+        if (newId == null) continue;
+        final origin = originByGuestId[row.id]!;
+        await _database
+            .into(_database.scanRecords)
+            .insert(
+              ScanRecordsCompanion.insert(
+                id: newId,
+                ownerId: Value(ownerId),
+                batchId: Value(
+                  row.batchId == null ? null : batchIdMap[row.batchId!],
+                ),
+                fruitType: row.fruitType,
+                ripenessStage: row.ripenessStage,
+                modelConfidence: row.modelConfidence,
+                modelVersion: row.modelVersion,
+                resultOrigin: Value(row.resultOrigin),
+                shelfLifeStatus: row.shelfLifeStatus,
+                shelfLifeMinimum: Value(row.shelfLifeMinimum),
+                shelfLifeMaximum: Value(row.shelfLifeMaximum),
+                shelfLifeUnit: Value(row.shelfLifeUnit),
+                shelfLifeGuidance: Value(row.shelfLifeGuidance),
+                shelfLifeReason: Value(row.shelfLifeReason),
+                shelfLifeEvidenceVersion: row.shelfLifeEvidenceVersion,
+                localImageRelativePath: Value(row.localImageRelativePath),
+                remoteImageKey: const Value<String?>(null),
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+                syncState: Value(pending),
+                remoteRevision: Value(origin.originalRemoteRevision),
+                imageSyncState: Value(imageState),
+              ),
+            );
+      }
+      for (final row in orders) {
+        final newId = orderIdMap[row.id];
+        if (newId == null) continue;
+        final origin = originByGuestId[row.id]!;
+        final newBatchId = batchIdMap[row.batchId];
+        if (newBatchId == null) continue;
+        await _database
+            .into(_database.orders)
+            .insert(
+              OrdersCompanion.insert(
+                id: newId,
+                ownerId: Value(ownerId),
+                batchId: newBatchId,
+                customerName: row.customerName,
+                deliveryAddress: row.deliveryAddress,
+                deliveryDate: row.deliveryDate,
+                status: row.status,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+                syncState: Value(pending),
+                remoteRevision: Value(origin.originalRemoteRevision),
+              ),
+            );
+      }
+
+      if (orderIdMap.isNotEmpty) {
+        await (_database.delete(
+          _database.orders,
+        )..where((row) => row.id.isIn(orderIdMap.keys))).go();
+      }
+      if (scanIdMap.isNotEmpty) {
+        await (_database.delete(
+          _database.scanRecords,
+        )..where((row) => row.id.isIn(scanIdMap.keys))).go();
+      }
+      if (batchIdMap.isNotEmpty) {
+        await (_database.delete(
+          _database.batches,
+        )..where((row) => row.id.isIn(batchIdMap.keys))).go();
+      }
+      // Scans, batches, and orders created after the detach have no origin
+      // mapping. Claim those rows as new records for the former owner.
+      await (_database.update(
+        _database.batches,
+      )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).write(
+        BatchesCompanion(ownerId: Value(ownerId), syncState: Value(pending)),
+      );
+      await (_database.update(
+        _database.scanRecords,
+      )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).write(
+        ScanRecordsCompanion(
+          ownerId: Value(ownerId),
+          syncState: Value(pending),
+          imageSyncState: Value(imageState),
+        ),
+      );
+      await (_database.update(
+        _database.orders,
+      )..where((row) => row.ownerId.isNull() & row.deletedAt.isNull())).write(
+        OrdersCompanion(ownerId: Value(ownerId), syncState: Value(pending)),
+      );
+      await (_database.delete(_database.detachedEntityOrigins)..where(
+            (row) =>
+                row.workspaceId.equals(workspaceId) &
+                row.generation.equals(generation),
+          ))
+          .go();
+      await _database
+          .into(_database.accountSyncSettings)
+          .insertOnConflictUpdate(
+            AccountSyncSettingsCompanion.insert(
+              ownerId: ownerId,
+              imageUploadConsent: Value(imageUploadConsent),
+              consentVersion: Value(consentVersion),
+              syncState: Value(pending),
+            ),
+          );
+    });
+    return true;
   }
 
   Future<void> purgeGuestTombstones() async {
@@ -160,16 +438,18 @@ final class LocalSyncStore {
               ),
             ),
           );
-      await (_database.update(_database.appSettings)
-            ..where((row) => row.syncState.equals(syncing)))
-          .write(AppSettingsCompanion(syncState: Value(pending)));
+      await (_database.update(_database.accountSyncSettings)..where(
+            (row) =>
+                row.ownerId.equals(ownerId) & row.syncState.equals(syncing),
+          ))
+          .write(AccountSyncSettingsCompanion(syncState: Value(pending)));
     });
   }
 
-  Future<LocalSyncSettings> readSettings() async {
+  Future<LocalSyncSettings> readSettings(String ownerId) async {
     final row = await (_database.select(
-      _database.appSettings,
-    )..where((row) => row.id.equals(1))).getSingleOrNull();
+      _database.accountSyncSettings,
+    )..where((row) => row.ownerId.equals(ownerId))).getSingleOrNull();
     if (row == null) {
       return const LocalSyncSettings();
     }
@@ -179,15 +459,12 @@ final class LocalSyncStore {
   /// A consent decision only applies to the account that made it on this
   /// device. A stale decision from another account must not enable uploads.
   Future<bool?> photoConsentForAccount(String ownerId) async {
-    final settings = await readSettings();
-    return settings.consentAccountId == ownerId
-        ? settings.imageUploadConsent
-        : null;
+    return (await readSettings(ownerId)).imageUploadConsent;
   }
 
-  Stream<LocalSyncSettings> watchSettings() {
-    final query = _database.select(_database.appSettings)
-      ..where((row) => row.id.equals(1));
+  Stream<LocalSyncSettings> watchSettings(String ownerId) {
+    final query = _database.select(_database.accountSyncSettings)
+      ..where((row) => row.ownerId.equals(ownerId));
     return query.watchSingleOrNull().map(
       (row) => row == null ? const LocalSyncSettings() : _settingsFromRow(row),
     );
@@ -210,11 +487,12 @@ final class LocalSyncStore {
             SELECT 1 FROM orders
             WHERE owner_id = ? AND sync_state IN ('pending', 'failed')
             UNION ALL
-            SELECT 1 FROM app_settings
-            WHERE sync_state IN ('pending', 'failed')
+            SELECT 1 FROM account_sync_settings
+            WHERE owner_id = ? AND sync_state IN ('pending', 'failed')
           ) AS has_pending
           ''',
           variables: [
+            Variable<String>(ownerId),
             Variable<String>(ownerId),
             Variable<String>(ownerId),
             Variable<String>(ownerId),
@@ -223,7 +501,7 @@ final class LocalSyncStore {
             _database.batches,
             _database.scanRecords,
             _database.orders,
-            _database.appSettings,
+            _database.accountSyncSettings,
           },
         )
         .watchSingle()
@@ -242,11 +520,10 @@ final class LocalSyncStore {
         : LocalSyncState.localOnly;
     await _database.transaction(() async {
       await _database
-          .into(_database.appSettings)
+          .into(_database.accountSyncSettings)
           .insertOnConflictUpdate(
-            AppSettingsCompanion.insert(
-              id: const Value(1),
-              consentAccountId: Value(ownerId),
+            AccountSyncSettingsCompanion.insert(
+              ownerId: ownerId,
               imageUploadConsent: Value(consent),
               consentVersion: Value(consentVersion),
               syncState: Value(PersistenceCodecs.encodeSyncState(state)),
@@ -319,7 +596,7 @@ final class LocalSyncStore {
                 .get();
         return rows.map(_orderToRemote).toList(growable: false);
       case SyncTable.userSettings:
-        final settings = await readSettings();
+        final settings = await readSettings(userId);
         if (settings.imageUploadConsent == null ||
             !retryable.contains(
               PersistenceCodecs.encodeSyncState(settings.syncState),
@@ -389,9 +666,9 @@ final class LocalSyncStore {
         );
       case SyncTable.userSettings:
         await (_database.update(
-          _database.appSettings,
-        )..where((row) => row.id.equals(1))).write(
-          AppSettingsCompanion(
+          _database.accountSyncSettings,
+        )..where((row) => row.ownerId.equals(id))).write(
+          AccountSyncSettingsCompanion(
             syncState: Value(encoded),
             remoteRevision: remoteRevision == null
                 ? const Value.absent()
@@ -554,7 +831,7 @@ final class LocalSyncStore {
               );
           return result;
         case SyncTable.userSettings:
-          final settings = await readSettings();
+          final settings = await readSettings(remote.userId);
           final result = _applyResult(
             settings.remoteRevision,
             PersistenceCodecs.encodeSyncState(settings.syncState),
@@ -562,11 +839,10 @@ final class LocalSyncStore {
           );
           if (result == LocalApplyResult.ignoredAsDuplicate) return result;
           await _database
-              .into(_database.appSettings)
+              .into(_database.accountSyncSettings)
               .insertOnConflictUpdate(
-                AppSettingsCompanion.insert(
-                  id: const Value(1),
-                  consentAccountId: Value(remote.userId),
+                AccountSyncSettingsCompanion.insert(
+                  ownerId: remote.userId,
                   imageUploadConsent: Value(
                     _requiredBool(remote.values, 'image_upload_consent'),
                   ),
@@ -696,26 +972,27 @@ final class LocalSyncStore {
     );
   }
 
-  Future<void> recordAttempt(DateTime at) async {
+  Future<void> recordAttempt(String ownerId, DateTime at) async {
     await _database
-        .into(_database.appSettings)
+        .into(_database.accountSyncSettings)
         .insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
+          AccountSyncSettingsCompanion.insert(
+            ownerId: ownerId,
             lastSyncAttemptAt: Value(at.toUtc()),
           ),
         );
   }
 
   Future<void> recordSuccess({
+    required String ownerId,
     required DateTime at,
     required DateTime anchor,
   }) async {
     await _database
-        .into(_database.appSettings)
+        .into(_database.accountSyncSettings)
         .insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
+          AccountSyncSettingsCompanion.insert(
+            ownerId: ownerId,
             lastSuccessfulSyncAt: Value(at.toUtc()),
             lastSyncAttemptAt: Value(at.toUtc()),
             syncCursorAt: Value(anchor.toUtc()),
@@ -725,14 +1002,15 @@ final class LocalSyncStore {
   }
 
   Future<void> recordFailure({
+    required String ownerId,
     required DateTime at,
     required String errorCode,
   }) async {
     await _database
-        .into(_database.appSettings)
+        .into(_database.accountSyncSettings)
         .insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            id: const Value(1),
+          AccountSyncSettingsCompanion.insert(
+            ownerId: ownerId,
             lastSyncAttemptAt: Value(at.toUtc()),
             lastSyncErrorCode: Value(errorCode),
           ),
@@ -788,7 +1066,7 @@ final class LocalSyncStore {
                         .not(),
               ))
             .getSingle();
-    final settings = await readSettings();
+    final settings = await readSettings(ownerId);
     final settingsCount =
         settings.syncState == LocalSyncState.pending ||
             settings.syncState == LocalSyncState.syncing ||
@@ -817,7 +1095,7 @@ final class LocalSyncStore {
       batches: batches,
       scans: scans,
       orders: orders,
-      settings: await readSettings(),
+      settings: await readSettings(ownerId),
     );
   }
 
@@ -854,14 +1132,229 @@ final class LocalSyncStore {
       await (_database.delete(
         _database.batches,
       )..where((row) => row.ownerId.equals(ownerId))).go();
-      await _database.delete(_database.appSettings).go();
+      await (_database.delete(
+        _database.accountSyncSettings,
+      )..where((row) => row.ownerId.equals(ownerId))).go();
       return imagePaths;
     });
   }
 
-  static LocalSyncSettings _settingsFromRow(AppSettingsRow row) {
+  /// Detaches an authenticated owner's active local graph into Guest mode.
+  ///
+  /// The caller supplies fresh IDs and copied image paths. This method keeps
+  /// the database part atomic: active rows are recreated as unowned,
+  /// local-only records, then the old owner rows and account sync settings are
+  /// removed. Remote identifiers, revisions, tombstones, and sync queues are
+  /// intentionally discarded so the detached copy cannot be synchronized to
+  /// the old account.
+  Future<List<String>> detachAccountToGuest({
+    required String ownerId,
+    required Map<String, String> batchIdMap,
+    required Map<String, String> scanIdMap,
+    required Map<String, String> orderIdMap,
+    required Map<String, String> imagePathByScanId,
+    String workspaceId = 'legacy-workspace',
+    int workspaceGeneration = 0,
+  }) async {
+    final localOnly = PersistenceCodecs.encodeSyncState(
+      LocalSyncState.localOnly,
+    );
+    final imageLocalOnly = PersistenceCodecs.encodeImageSyncState(
+      ImageSyncState.localOnly,
+    );
+
+    return _database.transaction(() async {
+      final batches = await (_database.select(
+        _database.batches,
+      )..where((row) => row.ownerId.equals(ownerId))).get();
+      final scans = await (_database.select(
+        _database.scanRecords,
+      )..where((row) => row.ownerId.equals(ownerId))).get();
+      final orders = await (_database.select(
+        _database.orders,
+      )..where((row) => row.ownerId.equals(ownerId))).get();
+      final detachedAt = DateTime.now().toUtc();
+      final oldImagePaths = scans
+          .map((row) => row.localImageRelativePath)
+          .whereType<String>()
+          .toList(growable: false);
+      final activeBatchIds = batches
+          .where((row) => row.deletedAt == null)
+          .map((row) => row.id)
+          .toSet();
+
+      for (final batch in batches.where((row) => row.deletedAt == null)) {
+        final newId = batchIdMap[batch.id];
+        if (newId == null) {
+          throw StateError('Missing detached batch ID for ${batch.id}.');
+        }
+        await _database
+            .into(_database.batches)
+            .insert(
+              BatchesCompanion.insert(
+                id: newId,
+                ownerId: Value<String?>(null),
+                name: batch.name,
+                fruitType: batch.fruitType,
+                createdAt: batch.createdAt,
+                updatedAt: batch.updatedAt,
+                syncState: Value(localOnly),
+                remoteRevision: const Value(0),
+              ),
+            );
+        await _database
+            .into(_database.detachedEntityOrigins)
+            .insert(
+              DetachedEntityOriginsCompanion.insert(
+                id: _originId(
+                  'batch',
+                  batch.id,
+                  workspaceId,
+                  workspaceGeneration,
+                ),
+                workspaceId: workspaceId,
+                generation: workspaceGeneration,
+                entityType: 'batch',
+                guestEntityId: newId,
+                originalOwnerId: ownerId,
+                originalEntityId: batch.id,
+                originalRemoteRevision: batch.remoteRevision,
+                detachedAt: detachedAt,
+              ),
+            );
+      }
+
+      for (final scan in scans.where((row) => row.deletedAt == null)) {
+        final newId = scanIdMap[scan.id];
+        if (newId == null) {
+          throw StateError('Missing detached scan ID for ${scan.id}.');
+        }
+        final newBatchId = scan.batchId == null
+            ? null
+            : batchIdMap[scan.batchId!];
+        final imagePath = imagePathByScanId[scan.id];
+        await _database
+            .into(_database.scanRecords)
+            .insert(
+              ScanRecordsCompanion.insert(
+                id: newId,
+                ownerId: Value<String?>(null),
+                batchId: Value<String?>(newBatchId),
+                fruitType: scan.fruitType,
+                ripenessStage: scan.ripenessStage,
+                modelConfidence: scan.modelConfidence,
+                modelVersion: scan.modelVersion,
+                resultOrigin: Value(scan.resultOrigin),
+                shelfLifeStatus: scan.shelfLifeStatus,
+                shelfLifeMinimum: Value(scan.shelfLifeMinimum),
+                shelfLifeMaximum: Value(scan.shelfLifeMaximum),
+                shelfLifeUnit: Value(scan.shelfLifeUnit),
+                shelfLifeGuidance: Value(scan.shelfLifeGuidance),
+                shelfLifeReason: Value(scan.shelfLifeReason),
+                shelfLifeEvidenceVersion: scan.shelfLifeEvidenceVersion,
+                localImageRelativePath: Value(imagePath),
+                remoteImageKey: const Value<String?>(null),
+                createdAt: scan.createdAt,
+                updatedAt: scan.updatedAt,
+                syncState: Value(localOnly),
+                remoteRevision: const Value(0),
+                imageSyncState: Value(imageLocalOnly),
+              ),
+            );
+        await _database
+            .into(_database.detachedEntityOrigins)
+            .insert(
+              DetachedEntityOriginsCompanion.insert(
+                id: _originId(
+                  'scan',
+                  scan.id,
+                  workspaceId,
+                  workspaceGeneration,
+                ),
+                workspaceId: workspaceId,
+                generation: workspaceGeneration,
+                entityType: 'scan',
+                guestEntityId: newId,
+                originalOwnerId: ownerId,
+                originalEntityId: scan.id,
+                originalRemoteRevision: scan.remoteRevision,
+                detachedAt: detachedAt,
+              ),
+            );
+      }
+
+      for (final order in orders.where(
+        (row) => row.deletedAt == null && activeBatchIds.contains(row.batchId),
+      )) {
+        final newId = orderIdMap[order.id];
+        final newBatchId = batchIdMap[order.batchId];
+        if (newId == null || newBatchId == null) {
+          throw StateError('Missing detached order mapping for ${order.id}.');
+        }
+        await _database
+            .into(_database.orders)
+            .insert(
+              OrdersCompanion.insert(
+                id: newId,
+                ownerId: Value<String?>(null),
+                batchId: newBatchId,
+                customerName: order.customerName,
+                deliveryAddress: order.deliveryAddress,
+                deliveryDate: order.deliveryDate,
+                status: order.status,
+                createdAt: order.createdAt,
+                updatedAt: order.updatedAt,
+                syncState: Value(localOnly),
+                remoteRevision: const Value(0),
+              ),
+            );
+        await _database
+            .into(_database.detachedEntityOrigins)
+            .insert(
+              DetachedEntityOriginsCompanion.insert(
+                id: _originId(
+                  'order',
+                  order.id,
+                  workspaceId,
+                  workspaceGeneration,
+                ),
+                workspaceId: workspaceId,
+                generation: workspaceGeneration,
+                entityType: 'order',
+                guestEntityId: newId,
+                originalOwnerId: ownerId,
+                originalEntityId: order.id,
+                originalRemoteRevision: order.remoteRevision,
+                detachedAt: detachedAt,
+              ),
+            );
+      }
+
+      await (_database.delete(
+        _database.orders,
+      )..where((row) => row.ownerId.equals(ownerId))).go();
+      await (_database.delete(
+        _database.scanRecords,
+      )..where((row) => row.ownerId.equals(ownerId))).go();
+      await (_database.delete(
+        _database.batches,
+      )..where((row) => row.ownerId.equals(ownerId))).go();
+      await (_database.delete(
+        _database.accountSyncSettings,
+      )..where((row) => row.ownerId.equals(ownerId))).go();
+      return oldImagePaths;
+    });
+  }
+
+  static String _originId(
+    String entityType,
+    String entityId,
+    String workspaceId,
+    int generation,
+  ) => '$workspaceId:$generation:$entityType:$entityId';
+
+  static LocalSyncSettings _settingsFromRow(AccountSyncSettingsRow row) {
     return LocalSyncSettings(
-      consentAccountId: row.consentAccountId,
       imageUploadConsent: row.imageUploadConsent,
       consentVersion: row.consentVersion,
       lastSuccessfulSyncAt: row.lastSuccessfulSyncAt?.toUtc(),

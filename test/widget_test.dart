@@ -8,6 +8,7 @@ import 'package:kami/app/kami_app.dart';
 import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/app/theme/theme_mode_controller.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/features/auth/data/device_account_link_store.dart';
 import 'package:kami/features/batches/data/drift_batch_repository.dart';
 import 'package:kami/features/batches/domain/batch_repository.dart';
 import 'package:kami/features/batches/domain/fruit_batch.dart';
@@ -353,6 +354,29 @@ void main() {
     expect(preferences.appearanceMode, AppearanceMode.light);
   });
 
+  testWidgets('Guest can detach a linked offline workspace', (
+    WidgetTester tester,
+  ) async {
+    final linkStore = _MemoryDeviceAccountLinkStore(
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    );
+    await _pumpGuestProfile(
+      tester,
+      linkedAccountId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      linkStore: linkStore,
+    );
+
+    expect(find.text('Keep data on this device'), findsOneWidget);
+    await tester.tap(find.text('Keep data on this device'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep offline data on this device?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keep data on this device'), findsOneWidget);
+  });
+
   testWidgets('bottom Scan entry separates upload image from Live Scan', (
     WidgetTester tester,
   ) async {
@@ -548,6 +572,56 @@ void main() {
     expect(find.text('No batches yet'), findsOneWidget);
     expect(find.text('Ready offline'), findsOneWidget);
     expect(find.text('Create first batch'), findsNothing);
+  });
+
+  testWidgets('empty History selection keeps Cancel available', (
+    WidgetTester tester,
+  ) async {
+    await _pumpReturningGuest(tester, imagePicker: FakeScanImagePicker());
+
+    await tester.tap(find.bySemanticsLabel('History'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('history-select-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No saved scans yet'), findsOneWidget);
+    expect(find.text('0 of 0 selected'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('history-select-button')), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('History refreshes when a saved scan changes locally', (
+    WidgetTester tester,
+  ) async {
+    final scans = FakeScanRecordRepository();
+    await _pumpReturningGuest(
+      tester,
+      imagePicker: FakeScanImagePicker(),
+      scanRepository: scans,
+    );
+
+    await tester.tap(find.bySemanticsLabel('History'));
+    await tester.pumpAndSettle();
+    expect(find.text('No saved scans yet'), findsOneWidget);
+
+    await scans.create(
+      _savedDemoRecord(
+        id: '99999999-9999-4999-8999-999999999999',
+        omitImage: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No saved scans yet'), findsNothing);
+    expect(find.text('Showing 1 of 1 scans'), findsOneWidget);
+    expect(find.text('Carabao mango'), findsOneWidget);
   });
 
   testWidgets('History and Batches support larger text on a narrow screen', (
@@ -1901,14 +1975,16 @@ void main() {
     expect(find.text('Market mangoes'), findsOneWidget);
     expect(find.text('Pending mangoes'), findsOneWidget);
     expect(find.text('Completed mangoes'), findsOneWidget);
-    final batchCardWidth = tester.getSize(
-      find
-          .ancestor(
-            of: find.text('Market mangoes'),
-            matching: find.byType(Card),
-          )
-          .first,
-    ).width;
+    final batchCardWidth = tester
+        .getSize(
+          find
+              .ancestor(
+                of: find.text('Market mangoes'),
+                matching: find.byType(Card),
+              )
+              .first,
+        )
+        .width;
 
     await tester.enterText(find.byType(TextField), '  PENDING  ');
     await tester.pump();
@@ -1942,14 +2018,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pending mangoes'), findsNothing);
     expect(find.text('No batches with this status'), findsOneWidget);
-    final emptyCardWidth = tester.getSize(
-      find
-          .ancestor(
-            of: find.text('No batches with this status'),
-            matching: find.byType(Card),
-          )
-          .first,
-    ).width;
+    final emptyCardWidth = tester
+        .getSize(
+          find
+              .ancestor(
+                of: find.text('No batches with this status'),
+                matching: find.byType(Card),
+              )
+              .first,
+        )
+        .width;
     expect(emptyCardWidth, closeTo(batchCardWidth, 0.01));
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'Completed'));
@@ -2416,6 +2494,8 @@ Future<void> _pumpKami(
   BatchRepository? batchRepository,
   OrderRepository? orderRepository,
   BatchSnapshot? batchSnapshotOverride,
+  String? linkedAccountId,
+  DeviceAccountLinkStore? linkStore,
 }) async {
   final repository = scanRepository ?? FakeScanRecordRepository();
   final imageStore = retainedImageStore ?? FakeRetainedScanImageStore();
@@ -2442,6 +2522,10 @@ Future<void> _pumpKami(
               ? ThemeMode.dark
               : ThemeMode.light,
         ),
+        if (linkedAccountId != null)
+          initialLinkedAccountIdProvider.overrideWithValue(linkedAccountId),
+        if (linkStore != null)
+          deviceAccountLinkStoreProvider.overrideWithValue(linkStore),
         scanRecordRepositoryProvider.overrideWithValue(repository),
         retainedScanImageStoreProvider.overrideWithValue(imageStore),
         batchRepositoryProvider.overrideWithValue(batches),
@@ -2505,6 +2589,8 @@ Future<void> _pumpReturningGuest(
 Future<FakeStartupPreferences> _pumpGuestProfile(
   WidgetTester tester, {
   bool failWrites = false,
+  String? linkedAccountId,
+  DeviceAccountLinkStore? linkStore,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1080, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2518,6 +2604,8 @@ Future<FakeStartupPreferences> _pumpGuestProfile(
     tester,
     destination: StartupDestination.returningGuest,
     preferences: preferences,
+    linkedAccountId: linkedAccountId,
+    linkStore: linkStore,
   );
 
   await tester.tap(find.text('Profile'));
@@ -2559,6 +2647,78 @@ Future<void> _openUploadFlow(WidgetTester tester) async {
   await _pumpRoute(tester);
   await tester.tap(find.text('Upload image'));
   await _pumpRoute(tester);
+}
+
+final class _MemoryDeviceAccountLinkStore implements DeviceAccountLinkStore {
+  _MemoryDeviceAccountLinkStore(this.linkedAccountId);
+
+  String? linkedAccountId;
+  final Set<String> promptedAccountIds = <String>{};
+  String workspaceId = '11111111-1111-4111-8111-111111111111';
+  String installationId = '22222222-2222-4222-8222-222222222222';
+  int generation = 0;
+  String? revocationToken;
+  bool pendingRelease = false;
+
+  @override
+  Future<String?> readLinkedAccountId() async => linkedAccountId;
+
+  @override
+  Future<void> writeLinkedAccountId(String accountId) async {
+    linkedAccountId = accountId;
+  }
+
+  @override
+  Future<void> clearLinkedAccountId() async {
+    linkedAccountId = null;
+  }
+
+  @override
+  Future<void> clearLinkedAccountIdIfMatches(String accountId) async {
+    if (linkedAccountId == accountId) linkedAccountId = null;
+  }
+
+  @override
+  Future<bool> hasAskedToLink(String accountId) async =>
+      promptedAccountIds.contains('$generation:$accountId');
+
+  @override
+  Future<void> markAskedToLink(String accountId) async {
+    promptedAccountIds.add('$generation:$accountId');
+  }
+
+  @override
+  Future<String> readOrCreateWorkspaceId() async => workspaceId;
+
+  @override
+  Future<String> readOrCreateInstallationId() async => installationId;
+
+  @override
+  Future<int> readWorkspaceGeneration() async => generation;
+
+  @override
+  Future<int> advanceWorkspaceGeneration() async => ++generation;
+
+  @override
+  Future<void> writeRevocationToken(String token) async {
+    revocationToken = token;
+  }
+
+  @override
+  Future<String?> readRevocationToken() async => revocationToken;
+
+  @override
+  Future<void> clearRevocationToken() async {
+    revocationToken = null;
+  }
+
+  @override
+  Future<bool> hasPendingRelease() async => pendingRelease;
+
+  @override
+  Future<void> setPendingRelease(bool pending) async {
+    pendingRelease = pending;
+  }
 }
 
 Future<void> _completeRescan(WidgetTester tester) async {

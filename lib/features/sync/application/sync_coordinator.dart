@@ -27,17 +27,19 @@ final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {
     ref.watch(syncGatewayProvider),
     () => ref.read(localSyncStoreProvider),
     () => ref.read(retainedScanImageStoreProvider),
-    ref.watch(currentOwnerIdProvider),
+    ref.watch(authenticatedAccountIdProvider),
     ref.read(syncStatusProvider.notifier),
   );
 });
 
 final syncSettingsProvider = StreamProvider<LocalSyncSettings>((ref) {
-  return ref.watch(localSyncStoreProvider).watchSettings();
+  final userId = ref.watch(authenticatedAccountIdProvider);
+  if (userId == null) return Stream.value(const LocalSyncSettings());
+  return ref.watch(localSyncStoreProvider).watchSettings(userId);
 });
 
 final localSyncPendingProvider = StreamProvider<bool>((ref) {
-  final userId = ref.watch(currentOwnerIdProvider);
+  final userId = ref.watch(authenticatedAccountIdProvider);
   if (userId == null) return Stream.value(false);
   return ref.watch(localSyncStoreProvider).watchHasPendingWork(userId);
 });
@@ -112,7 +114,7 @@ final class SyncCoordinator {
     }
 
     final startedAt = DateTime.now().toUtc();
-    await _local.recordAttempt(startedAt);
+    await _local.recordAttempt(userId, startedAt);
     _status.setSyncing();
     var pushed = 0;
     var pulled = 0;
@@ -183,7 +185,7 @@ final class SyncCoordinator {
       conflicts += completedOrders.conflicts;
       recoverableFailures += completedOrders.failures;
 
-      final localSettings = await _local.readSettings();
+      final localSettings = await _local.readSettings(userId);
       if (localSettings.imageUploadConsent == true) {
         final imageOutcome = await _uploadPendingImages(gateway, userId);
         pushed += imageOutcome.accepted;
@@ -232,7 +234,7 @@ final class SyncCoordinator {
         }
       }
 
-      final pulledSettings = await _local.readSettings();
+      final pulledSettings = await _local.readSettings(userId);
       if (pulledSettings.imageUploadConsent == false) {
         final revokeOutcome = await _removeRevokedImages(gateway, userId);
         pushed += revokeOutcome.accepted;
@@ -247,7 +249,11 @@ final class SyncCoordinator {
       }
 
       final completedAt = DateTime.now().toUtc();
-      await _local.recordSuccess(at: completedAt, anchor: anchor);
+      await _local.recordSuccess(
+        ownerId: userId,
+        at: completedAt,
+        anchor: anchor,
+      );
       _status.setSuccess(completedAt, conflicts);
       return SyncRunResult(
         status: conflicts == 0 ? SyncStatus.upToDate : SyncStatus.conflict,
@@ -259,7 +265,11 @@ final class SyncCoordinator {
     } on _SyncFailure catch (error) {
       const errorCode = 'sync_failed';
       final failedAt = DateTime.now().toUtc();
-      await _local.recordFailure(at: failedAt, errorCode: errorCode);
+      await _local.recordFailure(
+        ownerId: userId,
+        at: failedAt,
+        errorCode: errorCode,
+      );
       _status.setFailure(errorCode, error.category);
       return SyncRunResult(
         status: SyncStatus.failed,
@@ -272,7 +282,11 @@ final class SyncCoordinator {
     } on Object {
       const errorCode = 'sync_failed';
       final failedAt = DateTime.now().toUtc();
-      await _local.recordFailure(at: failedAt, errorCode: errorCode);
+      await _local.recordFailure(
+        ownerId: userId,
+        at: failedAt,
+        errorCode: errorCode,
+      );
       _status.setFailure(errorCode, SyncFailureCategory.connection);
       return SyncRunResult(
         status: SyncStatus.failed,

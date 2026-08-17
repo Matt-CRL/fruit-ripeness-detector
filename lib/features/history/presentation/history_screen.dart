@@ -13,6 +13,7 @@ import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/history_selection_policy.dart';
 import 'package:kami/features/history/domain/saved_scan_query.dart';
 import 'package:kami/features/history/presentation/history_filters.dart';
+import 'package:kami/features/history/presentation/history_providers.dart';
 import 'package:kami/features/history/presentation/saved_scan_image.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 import 'package:kami/features/scan/presentation/ripeness_stage_style.dart';
@@ -38,6 +39,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   bool _isSelecting = false;
   bool _isDeleting = false;
   String? _lastRefreshToken;
+  int? _lastHistoryRevision;
+  bool _refreshQueued = false;
 
   @override
   void initState() {
@@ -63,6 +66,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   void _clearFilters() {
     setState(() => _filters = const HistoryFilters());
     _reload();
+  }
+
+  void _handleHistoryRevision(int revision) {
+    if (_lastHistoryRevision == null) {
+      _lastHistoryRevision = revision;
+      return;
+    }
+    if (_lastHistoryRevision == revision) return;
+    _lastHistoryRevision = revision;
+    if (!mounted || _isDeleting || _refreshQueued) return;
+    _refreshQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _refreshQueued = false;
+      if (mounted) await _reload(showLoading: false);
+    });
   }
 
   Future<void> _reload({bool showLoading = true}) async {
@@ -255,6 +273,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) => _buildPaged(context);
 
   Widget _buildPaged(BuildContext context) {
+    ref.listen(activeScanRevisionProvider, (_, next) {
+      next.whenData(_handleHistoryRevision);
+    });
+
     // Detail screens add a one-shot refresh token when they mutate a record
     // and return to this stateful shell branch. This avoids subscribing the
     // paged screen to the full scan collection just to detect changes.
@@ -355,6 +377,64 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 child: _historyBounded(
                   context,
                   _HistoryError(onRetry: _reload),
+                ),
+              )
+            else if (_isSelecting && _totalCount == 0)
+              SliverToBoxAdapter(
+                child: _historyBounded(
+                  context,
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: KamiResponsive.value(
+                        context,
+                        regular: 20,
+                        compact: 12,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _HistorySelectionToolbar(
+                          selectedCount: 0,
+                          totalCount: 0,
+                          onSelectAll: () {},
+                          onClearSelection: _clearSelection,
+                          onCancel: _exitSelection,
+                          onAddToBatch: null,
+                          showDisabledAddToBatch: false,
+                          onDelete: null,
+                          isDeleting: _isDeleting,
+                        ),
+                        const SizedBox(height: 12),
+                        if (_filters.activeCount > 0) ...[
+                          _HistoryActiveFilterTags(filters: _filters),
+                          const SizedBox(height: 12),
+                        ],
+                        FeatureEmptyStateCard(
+                          icon: _filters.activeCount == 0
+                              ? Icons.history_outlined
+                              : Icons.filter_alt_off_outlined,
+                          title: _filters.activeCount == 0
+                              ? 'No saved scans yet'
+                              : 'No scans match these filters',
+                          message: _filters.activeCount == 0
+                              ? 'Save a result after choosing a fruit photo '
+                                  'and it will appear here.'
+                              : 'Try adjusting the filters or clear them to '
+                                  'see all saved scans.',
+                          statusLabel: _filters.activeCount == 0
+                              ? 'Ready offline'
+                              : null,
+                          action: _filters.activeCount == 0
+                              ? null
+                              : OutlinedButton.icon(
+                                  onPressed: _clearFilters,
+                                  icon: const Icon(Icons.clear_all),
+                                  label: const Text('Clear filters'),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               )
             else if (_totalCount == 0 && _filters.activeCount == 0)

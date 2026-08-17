@@ -23,10 +23,13 @@ final saveScanResultUseCaseProvider = Provider<SaveScanResultUseCase>((ref) {
     ref.watch(retainedScanImageStoreProvider),
     ref.watch(utcNowProvider),
     ref.watch(currentOwnerIdProvider),
-    () async =>
-        (await ref.read(localSyncStoreProvider).readSettings())
-            .imageUploadConsent ==
-        true,
+    () async {
+      final ownerId = ref.read(currentOwnerIdProvider);
+      if (ownerId == null) return false;
+      return (await ref.read(localSyncStoreProvider).readSettings(ownerId))
+              .imageUploadConsent ==
+          true;
+    },
   );
 });
 

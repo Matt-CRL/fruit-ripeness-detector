@@ -95,6 +95,41 @@ final class AppPrivateRetainedScanImageStore implements RetainedScanImageStore {
   }
 
   @override
+  Future<RetainedScanImage> copyToScan({
+    required String sourceRelativePath,
+    required String scanId,
+  }) async {
+    PersistenceValidation.entityId(scanId, 'scanId');
+    final source = File(await resolvePath(sourceRelativePath));
+    if (!await source.exists() || await source.length() == 0) {
+      throw const RetainedScanImageException(
+        'The retained source image is unavailable.',
+      );
+    }
+
+    final directory = await _historyDirectory();
+    await directory.create(recursive: true);
+    final output = File(
+      '${directory.path}${Platform.pathSeparator}$scanId.jpg',
+    );
+    if (await output.exists()) {
+      throw const RetainedScanImageException(
+        'A retained image already exists for this scan.',
+      );
+    }
+
+    try {
+      await source.copy(output.path);
+      return RetainedScanImage(relativePath: '$_historyDirectoryName/$scanId.jpg');
+    } on Object {
+      if (await output.exists()) {
+        await output.delete();
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<String> resolvePath(String relativePath) async {
     final fileName = _validatedFileName(relativePath);
     final directory = await _historyDirectory();

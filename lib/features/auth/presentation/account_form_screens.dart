@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
+import 'package:kami/features/account/application/account_session_service.dart';
 import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/auth/data/device_account_link_store.dart';
+import 'package:kami/features/auth/data/offline_workspace_link_service.dart';
 import 'package:kami/features/auth/domain/auth_repository.dart';
 import 'package:kami/features/auth/presentation/development_photo_consent_dialog.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
@@ -17,25 +19,109 @@ import 'package:kami/features/sync/domain/sync_models.dart';
 Future<void> _openAfterAuthentication(
   BuildContext context,
   WidgetRef ref,
-  AccountUser user, {
-    bool createdAccount = false,
-    bool transferApproved = false,
-  }) async {
+  AccountUser user,
+) async {
   final localSync = ref.read(localSyncStoreProvider);
   final hasGuestData = await localSync.hasActiveGuestData();
+  var linkedAccountId = ref.read(deviceLinkedAccountIdProvider);
+  var linkAccepted = linkedAccountId == user.id;
+  var claimedThisSession = false;
   final linkStore = ref.read(deviceAccountLinkStoreProvider);
-  final linkedAccountId = await linkStore.readLinkedAccountId();
+  final workspaceId = await linkStore.readOrCreateWorkspaceId();
+  final installationId = await linkStore.readOrCreateInstallationId();
+  final workspaceGeneration = await linkStore.readWorkspaceGeneration();
+  await localSync.saveOfflineWorkspaceState(
+    workspaceId: workspaceId,
+    installationId: installationId,
+    generation: workspaceGeneration,
+    pendingRelease: await linkStore.hasPendingRelease(),
+  );
   if (!context.mounted) return;
 
-  final shouldClaim = hasGuestData &&
-      (linkedAccountId == user.id ||
-          (createdAccount && linkedAccountId == null && transferApproved));
-
-  if (createdAccount && linkedAccountId == null) {
-    // Establish the link before claiming so a transient failure can be retried
-    // automatically when this same account signs in again on this device.
-    await linkStore.writeLinkedAccountId(user.id);
+  final workspaceLink = ref.read(offlineWorkspaceLinkServiceProvider);
+  if (linkedAccountId == null) {
+    final releaseReady = await workspaceLink.retryPendingRelease(
+      authenticated: true,
+    );
+    final eligibility = releaseReady
+        ? await workspaceLink.checkEligibility(user.id)
+        : WorkspaceLinkEligibility.pendingRelease;
+    if (eligibility == WorkspaceLinkEligibility.eligible &&
+        !await linkStore.hasAskedToLink(user.id)) {
+      await linkStore.markAskedToLink(user.id);
+      if (!context.mounted) return;
+      final link = await _confirmOfflineWorkspaceLink(context, hasGuestData);
+      if (link == true) {
+        final result = await workspaceLink.link(user.id);
+        if (result == WorkspaceLinkResult.linked) {
+          await ref.read(deviceLinkedAccountIdProvider.notifier).link(user.id);
+          linkedAccountId = user.id;
+          linkAccepted = true;
+          claimedThisSession = true;
+          await localSync.saveOfflineWorkspaceState(
+            workspaceId: workspaceId,
+            installationId: installationId,
+            generation: workspaceGeneration,
+            pendingRelease: false,
+          );
+        } else if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result == WorkspaceLinkResult.accountLinkedElsewhere
+                    ? 'This account already keeps an offline workspace on '
+                          'another device.'
+                    : 'This device could not link the offline workspace. '
+                          'You can try again from Profile.',
+              ),
+            ),
+          );
+        }
+      }
+    } else if (eligibility == WorkspaceLinkEligibility.accountLinkedElsewhere &&
+        context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This account already keeps an offline workspace on another '
+            'device. This session stays separate from local Guest data.',
+          ),
+        ),
+      );
+    }
+  } else if (linkedAccountId == user.id) {
+    // Legacy linked installations predate the global registry. Re-register
+    // them the next time the owner authenticates, when Supabase is available.
+    // A local_already_linked response is idempotent; an unavailable response
+    // leaves the existing offline owner untouched for a later retry.
+    final result = await workspaceLink.link(user.id);
+    if (result == WorkspaceLinkResult.accountLinkedElsewhere) {
+      // A legacy installation can discover that the account was registered by
+      // another phone. Detach this phone's graph to Guest before continuing;
+      // never claim or merge the other phone's workspace. The detach service
+      // also clears the local owner and signs out this temporary session.
+      var detached = false;
+      try {
+        await ref.read(accountSessionServiceProvider).detachLinkedWorkspace();
+        detached = true;
+      } on Object {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This account is linked to another device. Detach the local '
+                'workspace from Profile before trying again.',
+              ),
+            ),
+          );
+        }
+      }
+      if (detached && context.mounted) context.go(AppRoutes.accountChoice);
+      return;
+    }
   }
+
+  final shouldClaim = linkAccepted;
 
   var photoConsent = await localSync.photoConsentForAccount(user.id);
   if (photoConsent == null) {
@@ -50,10 +136,20 @@ Future<void> _openAfterAuthentication(
 
   try {
     if (shouldClaim) {
-      await localSync.claimGuestData(
+      final reassociated = await localSync.reassociateDetachedGuestData(
         ownerId: user.id,
+        workspaceId: workspaceId,
+        generation: workspaceGeneration > 0
+            ? workspaceGeneration - 1
+            : workspaceGeneration,
         imageUploadConsent: photoConsent,
       );
+      if (!reassociated && hasGuestData) {
+        await localSync.claimGuestData(
+          ownerId: user.id,
+          imageUploadConsent: photoConsent,
+        );
+      }
     } else {
       await localSync.purgeGuestTombstones();
       await localSync.setImageUploadConsent(
@@ -63,6 +159,12 @@ Future<void> _openAfterAuthentication(
       );
     }
   } on Object {
+    if (claimedThisSession) {
+      await workspaceLink.release(authenticated: true);
+      await ref
+          .read(deviceLinkedAccountIdProvider.notifier)
+          .clearIfMatches(user.id);
+    }
     await ref.read(authRepositoryProvider).signOut(localOnly: true);
     if (context.mounted) {
       await showDialog<void>(
@@ -102,6 +204,38 @@ Future<void> _openAfterAuthentication(
   unawaited(ref.read(syncCoordinatorProvider).syncNow(SyncTrigger.signIn));
 }
 
+Future<bool?> _confirmOfflineWorkspaceLink(
+  BuildContext context,
+  bool hasGuestData,
+) {
+  return showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Keep local data with this account?'),
+      content: Text(
+        hasGuestData
+            ? 'Kami found local scans, batches, or orders. Link this account '
+                  'so they remain available when you sign out and return to '
+                  'Guest mode.'
+            : 'Link this account to the offline workspace on this device. '
+                  'New local scans, batches, and orders will remain available '
+                  'when you sign out and return to Guest mode.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Not now'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Link account'),
+        ),
+      ],
+    ),
+  );
+}
+
 String? _validateEmail(String? value) {
   final email = value?.trim() ?? '';
   final separator = email.indexOf('@');
@@ -137,43 +271,6 @@ String? _validateDisplayName(String? value) {
     return 'Enter a display name from 2 to 50 characters.';
   }
   return null;
-}
-
-Future<bool> _confirmGuestTransferBeforeSignup(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final hasGuestData = await ref
-      .read(localSyncStoreProvider)
-      .hasActiveGuestData();
-  final linkedAccountId = await ref
-      .read(deviceAccountLinkStoreProvider)
-      .readLinkedAccountId();
-  if (!hasGuestData || linkedAccountId != null || !context.mounted) {
-    return true;
-  }
-  final transfer = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Transfer local data?'),
-      content: const Text(
-        'Kami found scans, batches, or orders saved on this device. Transfer '
-        'all active local data to this new account?',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Transfer and create account'),
-        ),
-      ],
-    ),
-  );
-  return transfer == true;
 }
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -247,7 +344,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ),
               validator: _validateEmail,
             ),
-            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 16, compact: 12),
+            ),
             TextFormField(
               controller: _passwordController,
               enabled: !_submitting,
@@ -275,7 +374,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 20, compact: 16),
+            ),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
@@ -329,8 +430,6 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final transferApproved = await _confirmGuestTransferBeforeSignup(context, ref);
-    if (!transferApproved || !mounted) return;
     setState(() {
       _submitting = true;
       _error = null;
@@ -343,11 +442,6 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
             password: _passwordController.text,
             displayName: _displayNameController.text.trim(),
           );
-      if (!mounted) return;
-      final linkStore = ref.read(deviceAccountLinkStoreProvider);
-      if (await linkStore.readLinkedAccountId() == null) {
-        await linkStore.writeLinkedAccountId(result.user.id);
-      }
       if (!mounted) return;
       if (result.requiresEmailConfirmation) {
         await showDialog<void>(
@@ -368,13 +462,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
         if (mounted) context.go(AppRoutes.signIn);
       } else {
         if (!mounted) return;
-        await _openAfterAuthentication(
-          context,
-          ref,
-          result.user,
-          createdAccount: true,
-          transferApproved: transferApproved,
-        );
+        await _openAfterAuthentication(context, ref, result.user);
       }
     } on AccountAuthException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -405,7 +493,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               ),
               validator: _validateDisplayName,
             ),
-            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 16, compact: 12),
+            ),
             TextFormField(
               controller: _emailController,
               enabled: !_submitting,
@@ -418,7 +508,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               ),
               validator: _validateEmail,
             ),
-            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 16, compact: 12),
+            ),
             TextFormField(
               controller: _passwordController,
               enabled: !_submitting,
@@ -443,7 +535,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
             ),
             const SizedBox(height: 10),
             _PasswordRequirements(password: _password),
-            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 16, compact: 12),
+            ),
             TextFormField(
               controller: _confirmationController,
               enabled: !_submitting,
@@ -462,7 +556,9 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 20, compact: 16),
+            ),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
@@ -552,7 +648,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     const SizedBox(height: 12),
                     _AccountError(message: _error!),
                   ],
-                  SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
+                  SizedBox(
+                    height: KamiResponsive.value(
+                      context,
+                      regular: 20,
+                      compact: 16,
+                    ),
+                  ),
                   FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
@@ -639,7 +741,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               ),
               validator: _validatePassword,
             ),
-            SizedBox(height: KamiResponsive.value(context, regular: 16, compact: 12)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 16, compact: 12),
+            ),
             TextFormField(
               controller: _confirmationController,
               enabled: !_submitting,
@@ -658,7 +762,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               const SizedBox(height: 12),
               _AccountError(message: _error!),
             ],
-            SizedBox(height: KamiResponsive.value(context, regular: 20, compact: 16)),
+            SizedBox(
+              height: KamiResponsive.value(context, regular: 20, compact: 16),
+            ),
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting

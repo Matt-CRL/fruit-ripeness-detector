@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'schema version six opens with foreign keys and matches Drift',
+    'schema version eight opens with foreign keys and matches Drift',
     () async {
       final foreignKeys = await database
           .customSelect('PRAGMA foreign_keys')
@@ -58,36 +58,34 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
 
-      expect(database.schemaVersion, 6);
+      expect(database.schemaVersion, 8);
       expect(foreignKeys.data.values.single, 1);
-      expect(userVersion.data.values.single, 6);
+      expect(userVersion.data.values.single, 8);
       await database.validateDatabaseSchema();
     },
   );
 
-  test('account-scoped history hides unrelated guest and account rows', () async {
-    await scans.create(_scan(id: _scanOneId));
-    await scans.create(_scan(id: _scanTwoId, ownerId: _ownerOneId));
-    await scans.create(_scan(id: _scanThreeId, ownerId: _ownerTwoId));
+  test(
+    'account-scoped history hides unrelated guest and account rows',
+    () async {
+      await scans.create(_scan(id: _scanOneId));
+      await scans.create(_scan(id: _scanTwoId, ownerId: _ownerOneId));
+      await scans.create(_scan(id: _scanThreeId, ownerId: _ownerTwoId));
 
-    final accountView = DriftScanRecordRepository(
-      database,
-      ownerId: _ownerOneId,
-      scopeOwner: true,
-    );
-    expect(
-      (await accountView.listActive()).map((record) => record.id),
-      [_scanTwoId],
-    );
-    final guestView = DriftScanRecordRepository(
-      database,
-      scopeOwner: true,
-    );
-    expect(
-      (await guestView.listActive()).map((record) => record.id),
-      [_scanOneId],
-    );
-  });
+      final accountView = DriftScanRecordRepository(
+        database,
+        ownerId: _ownerOneId,
+        scopeOwner: true,
+      );
+      expect((await accountView.listActive()).map((record) => record.id), [
+        _scanTwoId,
+      ]);
+      final guestView = DriftScanRecordRepository(database, scopeOwner: true);
+      expect((await guestView.listActive()).map((record) => record.id), [
+        _scanOneId,
+      ]);
+    },
+  );
 
   test('version one scan rows migrate with explicit Demo provenance', () async {
     await database.close();
@@ -146,18 +144,16 @@ void main() {
           .data
           .values
           .single,
-      6,
+      8,
     );
   });
 
-  test(
-    'version four account data migrates to sync schema without loss',
-    () async {
-      await database.close();
-      final migrated = AppDatabase(
-        NativeDatabase.memory(
-          setup: (rawDatabase) {
-            rawDatabase.execute('''
+  test('version four account data migrates domain rows safely', () async {
+    await database.close();
+    final migrated = AppDatabase(
+      NativeDatabase.memory(
+        setup: (rawDatabase) {
+          rawDatabase.execute('''
             CREATE TABLE batches (
               id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
               name TEXT NOT NULL, fruit_type TEXT NOT NULL,
@@ -166,7 +162,7 @@ void main() {
               sync_state TEXT NOT NULL DEFAULT 'local_only'
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             CREATE TABLE scan_records (
               id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
               batch_id TEXT NULL REFERENCES batches(id),
@@ -185,7 +181,7 @@ void main() {
               sync_state TEXT NOT NULL DEFAULT 'local_only'
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             CREATE TABLE orders (
               id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NULL,
               batch_id TEXT NOT NULL REFERENCES batches(id),
@@ -196,7 +192,7 @@ void main() {
               sync_state TEXT NOT NULL DEFAULT 'local_only'
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             CREATE TABLE app_settings (
               id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
               image_upload_consent INTEGER NULL,
@@ -204,13 +200,13 @@ void main() {
               last_successful_sync_at INTEGER NULL
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             INSERT INTO batches VALUES (
               '$_batchOneId', NULL, 'Preserved batch', 'carabao_mango',
               1785484800, 1785484800, NULL, 'local_only'
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             INSERT INTO scan_records VALUES (
               '$_scanOneId', NULL, '$_batchOneId', 'carabao_mango', 'ripe',
               0.91, 'preserved-model', 'on_device_model', 'available',
@@ -219,51 +215,100 @@ void main() {
               1785484800, 1785484800, NULL, 'local_only'
             )
           ''');
-            rawDatabase.execute('''
+          rawDatabase.execute('''
             INSERT INTO orders VALUES (
               '$_orderOneId', NULL, '$_batchOneId', 'Preserved customer',
               'Preserved address', 1785571200, 'pending',
               1785484800, 1785484800, NULL, 'local_only'
             )
           ''');
-            rawDatabase.execute(
-              "INSERT INTO app_settings VALUES (1, 0, 'consent-v1', NULL)",
-            );
-            rawDatabase.userVersion = 4;
-          },
-        ),
-      );
-      addTearDown(migrated.close);
+          rawDatabase.execute(
+            "INSERT INTO app_settings VALUES (1, 0, 'consent-v1', NULL)",
+          );
+          rawDatabase.userVersion = 4;
+        },
+      ),
+    );
+    addTearDown(migrated.close);
 
-      final batch = await migrated.select(migrated.batches).getSingle();
-      final scan = await migrated.select(migrated.scanRecords).getSingle();
-      final order = await migrated.select(migrated.orders).getSingle();
-      final settings = await migrated.select(migrated.appSettings).getSingle();
+    final batch = await migrated.select(migrated.batches).getSingle();
+    final scan = await migrated.select(migrated.scanRecords).getSingle();
+    final order = await migrated.select(migrated.orders).getSingle();
+    final settings = await migrated
+        .select(migrated.accountSyncSettings)
+        .getSingleOrNull();
 
-      expect(batch.name, 'Preserved batch');
-      expect(scan.modelVersion, 'preserved-model');
-      expect(order.customerName, 'Preserved customer');
-      expect(settings.imageUploadConsent, isFalse);
-      expect(batch.remoteRevision, 0);
-      expect(scan.remoteRevision, 0);
-      expect(scan.imageSyncState, 'local_only');
-      expect(order.remoteRevision, 0);
-      expect(settings.remoteRevision, 0);
-      expect(settings.syncState, 'local_only');
-      expect(
-        (await migrated.customSelect('PRAGMA user_version').getSingle())
-            .data
-            .values
-            .single,
-        6,
-      );
-    },
-  );
+    expect(batch.name, 'Preserved batch');
+    expect(scan.modelVersion, 'preserved-model');
+    expect(order.customerName, 'Preserved customer');
+    // Version-four settings had no account owner, so the migration drops
+    // the ambiguous singleton instead of exposing it to a later account.
+    expect(settings, isNull);
+    expect(batch.remoteRevision, 0);
+    expect(scan.remoteRevision, 0);
+    expect(scan.imageSyncState, 'local_only');
+    expect(order.remoteRevision, 0);
+    expect(
+      (await migrated.customSelect('PRAGMA user_version').getSingle())
+          .data
+          .values
+          .single,
+      8,
+    );
+  });
 
   test('UUID generator creates valid client-side identifiers', () {
     final id = const UuidEntityIdGenerator().nextId();
 
     expect(Uuid.isValidUUIDFormat(fromString: id), isTrue);
+  });
+
+  test('version six account settings migrate to owner-keyed rows', () async {
+    await database.close();
+    final migrated = AppDatabase(
+      NativeDatabase.memory(
+        setup: (rawDatabase) {
+          rawDatabase.execute('''
+            CREATE TABLE app_settings (
+              id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+              consent_account_id TEXT NULL,
+              image_upload_consent INTEGER NULL,
+              consent_version TEXT NULL,
+              last_successful_sync_at INTEGER NULL,
+              last_sync_attempt_at INTEGER NULL,
+              sync_cursor_at INTEGER NULL,
+              last_sync_error_code TEXT NULL,
+              sync_state TEXT NOT NULL DEFAULT 'local_only',
+              remote_revision INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          rawDatabase.execute('''
+            INSERT INTO app_settings VALUES (
+              1, '$_ownerOneId', 1, 'consent-v6', 1785484800,
+              1785484800, 1785484800, NULL, 'synchronized', 4
+            )
+          ''');
+          rawDatabase.userVersion = 6;
+        },
+      ),
+    );
+    addTearDown(migrated.close);
+
+    final settings = await migrated
+        .select(migrated.accountSyncSettings)
+        .getSingle();
+    expect(settings.ownerId, _ownerOneId);
+    expect(settings.imageUploadConsent, isTrue);
+    expect(settings.consentVersion, 'consent-v6');
+    expect(settings.remoteRevision, 4);
+    expect(settings.syncState, 'synchronized');
+    expect(
+      (await migrated.customSelect('PRAGMA user_version').getSingle())
+          .data
+          .values
+          .single,
+      8,
+    );
   });
 
   test(
@@ -833,7 +878,7 @@ void main() {
     },
   );
 
-  test('foreign keys and singleton app settings are enforced', () async {
+  test('foreign keys and account-scoped sync settings are enforced', () async {
     await expectLater(
       database
           .into(database.orders)
@@ -855,20 +900,21 @@ void main() {
     );
 
     await database
-        .into(database.appSettings)
+        .into(database.accountSyncSettings)
         .insert(
-          const AppSettingsCompanion(
-            id: Value(1),
-            consentAccountId: Value(_ownerOneId),
+          const AccountSyncSettingsCompanion(
+            ownerId: Value(_ownerOneId),
             imageUploadConsent: Value(false),
             consentVersion: Value('consent-v1'),
           ),
         );
     await expectLater(
       database
-          .into(database.appSettings)
-          .insert(const AppSettingsCompanion(id: Value(2))),
-      throwsA(anything),
+          .into(database.accountSyncSettings)
+          .insert(
+            const AccountSyncSettingsCompanion(ownerId: Value(_ownerTwoId)),
+          ),
+      completes,
     );
   });
 }

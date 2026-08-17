@@ -2668,32 +2668,22 @@ class OrdersCompanion extends UpdateCompanion<OrderRow> {
   }
 }
 
-class $AppSettingsTable extends AppSettings
-    with TableInfo<$AppSettingsTable, AppSettingsRow> {
+class $AccountSyncSettingsTable extends AccountSyncSettings
+    with TableInfo<$AccountSyncSettingsTable, AccountSyncSettingsRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $AppSettingsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  $AccountSyncSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _ownerIdMeta = const VerificationMeta(
+    'ownerId',
+  );
   @override
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
+  late final GeneratedColumn<String> ownerId = GeneratedColumn<String>(
+    'owner_id',
     aliasedName,
     false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(1),
-  );
-  static const VerificationMeta _consentAccountIdMeta = const VerificationMeta(
-    'consentAccountId',
-  );
-  @override
-  late final GeneratedColumn<String> consentAccountId = GeneratedColumn<String>(
-    'consent_account_id',
-    aliasedName,
-    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: false,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _imageUploadConsentMeta =
       const VerificationMeta('imageUploadConsent');
@@ -2793,8 +2783,7 @@ class $AppSettingsTable extends AppSettings
   );
   @override
   List<GeneratedColumn> get $columns => [
-    id,
-    consentAccountId,
+    ownerId,
     imageUploadConsent,
     consentVersion,
     lastSuccessfulSyncAt,
@@ -2808,25 +2797,21 @@ class $AppSettingsTable extends AppSettings
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'app_settings';
+  static const String $name = 'account_sync_settings';
   @override
   VerificationContext validateIntegrity(
-    Insertable<AppSettingsRow> instance, {
+    Insertable<AccountSyncSettingsRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('consent_account_id')) {
+    if (data.containsKey('owner_id')) {
       context.handle(
-        _consentAccountIdMeta,
-        consentAccountId.isAcceptableOrUnknown(
-          data['consent_account_id']!,
-          _consentAccountIdMeta,
-        ),
+        _ownerIdMeta,
+        ownerId.isAcceptableOrUnknown(data['owner_id']!, _ownerIdMeta),
       );
+    } else if (isInserting) {
+      context.missing(_ownerIdMeta);
     }
     if (data.containsKey('image_upload_consent')) {
       context.handle(
@@ -2901,19 +2886,15 @@ class $AppSettingsTable extends AppSettings
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {id};
+  Set<GeneratedColumn> get $primaryKey => {ownerId};
   @override
-  AppSettingsRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+  AccountSyncSettingsRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AppSettingsRow(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      consentAccountId: attachedDatabase.typeMapping.read(
+    return AccountSyncSettingsRow(
+      ownerId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}consent_account_id'],
-      ),
+        data['${effectivePrefix}owner_id'],
+      )!,
       imageUploadConsent: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}image_upload_consent'],
@@ -2950,14 +2931,14 @@ class $AppSettingsTable extends AppSettings
   }
 
   @override
-  $AppSettingsTable createAlias(String alias) {
-    return $AppSettingsTable(attachedDatabase, alias);
+  $AccountSyncSettingsTable createAlias(String alias) {
+    return $AccountSyncSettingsTable(attachedDatabase, alias);
   }
 }
 
-class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
-  final int id;
-  final String? consentAccountId;
+class AccountSyncSettingsRow extends DataClass
+    implements Insertable<AccountSyncSettingsRow> {
+  final String ownerId;
   final bool? imageUploadConsent;
   final String? consentVersion;
   final DateTime? lastSuccessfulSyncAt;
@@ -2966,9 +2947,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   final String? lastSyncErrorCode;
   final String syncState;
   final int remoteRevision;
-  const AppSettingsRow({
-    required this.id,
-    this.consentAccountId,
+  const AccountSyncSettingsRow({
+    required this.ownerId,
     this.imageUploadConsent,
     this.consentVersion,
     this.lastSuccessfulSyncAt,
@@ -2981,10 +2961,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    if (!nullToAbsent || consentAccountId != null) {
-      map['consent_account_id'] = Variable<String>(consentAccountId);
-    }
+    map['owner_id'] = Variable<String>(ownerId);
     if (!nullToAbsent || imageUploadConsent != null) {
       map['image_upload_consent'] = Variable<bool>(imageUploadConsent);
     }
@@ -3008,12 +2985,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     return map;
   }
 
-  AppSettingsCompanion toCompanion(bool nullToAbsent) {
-    return AppSettingsCompanion(
-      id: Value(id),
-      consentAccountId: consentAccountId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(consentAccountId),
+  AccountSyncSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AccountSyncSettingsCompanion(
+      ownerId: Value(ownerId),
       imageUploadConsent: imageUploadConsent == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUploadConsent),
@@ -3037,14 +3011,13 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     );
   }
 
-  factory AppSettingsRow.fromJson(
+  factory AccountSyncSettingsRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AppSettingsRow(
-      id: serializer.fromJson<int>(json['id']),
-      consentAccountId: serializer.fromJson<String?>(json['consentAccountId']),
+    return AccountSyncSettingsRow(
+      ownerId: serializer.fromJson<String>(json['ownerId']),
       imageUploadConsent: serializer.fromJson<bool?>(
         json['imageUploadConsent'],
       ),
@@ -3067,8 +3040,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'consentAccountId': serializer.toJson<String?>(consentAccountId),
+      'ownerId': serializer.toJson<String>(ownerId),
       'imageUploadConsent': serializer.toJson<bool?>(imageUploadConsent),
       'consentVersion': serializer.toJson<String?>(consentVersion),
       'lastSuccessfulSyncAt': serializer.toJson<DateTime?>(
@@ -3082,9 +3054,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     };
   }
 
-  AppSettingsRow copyWith({
-    int? id,
-    Value<String?> consentAccountId = const Value.absent(),
+  AccountSyncSettingsRow copyWith({
+    String? ownerId,
     Value<bool?> imageUploadConsent = const Value.absent(),
     Value<String?> consentVersion = const Value.absent(),
     Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -3093,11 +3064,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     Value<String?> lastSyncErrorCode = const Value.absent(),
     String? syncState,
     int? remoteRevision,
-  }) => AppSettingsRow(
-    id: id ?? this.id,
-    consentAccountId: consentAccountId.present
-        ? consentAccountId.value
-        : this.consentAccountId,
+  }) => AccountSyncSettingsRow(
+    ownerId: ownerId ?? this.ownerId,
     imageUploadConsent: imageUploadConsent.present
         ? imageUploadConsent.value
         : this.imageUploadConsent,
@@ -3117,12 +3085,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
     syncState: syncState ?? this.syncState,
     remoteRevision: remoteRevision ?? this.remoteRevision,
   );
-  AppSettingsRow copyWithCompanion(AppSettingsCompanion data) {
-    return AppSettingsRow(
-      id: data.id.present ? data.id.value : this.id,
-      consentAccountId: data.consentAccountId.present
-          ? data.consentAccountId.value
-          : this.consentAccountId,
+  AccountSyncSettingsRow copyWithCompanion(AccountSyncSettingsCompanion data) {
+    return AccountSyncSettingsRow(
+      ownerId: data.ownerId.present ? data.ownerId.value : this.ownerId,
       imageUploadConsent: data.imageUploadConsent.present
           ? data.imageUploadConsent.value
           : this.imageUploadConsent,
@@ -3150,9 +3115,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
 
   @override
   String toString() {
-    return (StringBuffer('AppSettingsRow(')
-          ..write('id: $id, ')
-          ..write('consentAccountId: $consentAccountId, ')
+    return (StringBuffer('AccountSyncSettingsRow(')
+          ..write('ownerId: $ownerId, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
           ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
@@ -3167,8 +3131,7 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
 
   @override
   int get hashCode => Object.hash(
-    id,
-    consentAccountId,
+    ownerId,
     imageUploadConsent,
     consentVersion,
     lastSuccessfulSyncAt,
@@ -3181,9 +3144,8 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is AppSettingsRow &&
-          other.id == this.id &&
-          other.consentAccountId == this.consentAccountId &&
+      (other is AccountSyncSettingsRow &&
+          other.ownerId == this.ownerId &&
           other.imageUploadConsent == this.imageUploadConsent &&
           other.consentVersion == this.consentVersion &&
           other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt &&
@@ -3194,9 +3156,9 @@ class AppSettingsRow extends DataClass implements Insertable<AppSettingsRow> {
           other.remoteRevision == this.remoteRevision);
 }
 
-class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
-  final Value<int> id;
-  final Value<String?> consentAccountId;
+class AccountSyncSettingsCompanion
+    extends UpdateCompanion<AccountSyncSettingsRow> {
+  final Value<String> ownerId;
   final Value<bool?> imageUploadConsent;
   final Value<String?> consentVersion;
   final Value<DateTime?> lastSuccessfulSyncAt;
@@ -3205,9 +3167,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
   final Value<String?> lastSyncErrorCode;
   final Value<String> syncState;
   final Value<int> remoteRevision;
-  const AppSettingsCompanion({
-    this.id = const Value.absent(),
-    this.consentAccountId = const Value.absent(),
+  final Value<int> rowid;
+  const AccountSyncSettingsCompanion({
+    this.ownerId = const Value.absent(),
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
@@ -3216,10 +3178,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.lastSyncErrorCode = const Value.absent(),
     this.syncState = const Value.absent(),
     this.remoteRevision = const Value.absent(),
+    this.rowid = const Value.absent(),
   });
-  AppSettingsCompanion.insert({
-    this.id = const Value.absent(),
-    this.consentAccountId = const Value.absent(),
+  AccountSyncSettingsCompanion.insert({
+    required String ownerId,
     this.imageUploadConsent = const Value.absent(),
     this.consentVersion = const Value.absent(),
     this.lastSuccessfulSyncAt = const Value.absent(),
@@ -3228,10 +3190,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     this.lastSyncErrorCode = const Value.absent(),
     this.syncState = const Value.absent(),
     this.remoteRevision = const Value.absent(),
-  });
-  static Insertable<AppSettingsRow> custom({
-    Expression<int>? id,
-    Expression<String>? consentAccountId,
+    this.rowid = const Value.absent(),
+  }) : ownerId = Value(ownerId);
+  static Insertable<AccountSyncSettingsRow> custom({
+    Expression<String>? ownerId,
     Expression<bool>? imageUploadConsent,
     Expression<String>? consentVersion,
     Expression<DateTime>? lastSuccessfulSyncAt,
@@ -3240,10 +3202,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Expression<String>? lastSyncErrorCode,
     Expression<String>? syncState,
     Expression<int>? remoteRevision,
+    Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (consentAccountId != null) 'consent_account_id': consentAccountId,
+      if (ownerId != null) 'owner_id': ownerId,
       if (imageUploadConsent != null)
         'image_upload_consent': imageUploadConsent,
       if (consentVersion != null) 'consent_version': consentVersion,
@@ -3254,12 +3216,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       if (lastSyncErrorCode != null) 'last_sync_error_code': lastSyncErrorCode,
       if (syncState != null) 'sync_state': syncState,
       if (remoteRevision != null) 'remote_revision': remoteRevision,
+      if (rowid != null) 'rowid': rowid,
     });
   }
 
-  AppSettingsCompanion copyWith({
-    Value<int>? id,
-    Value<String?>? consentAccountId,
+  AccountSyncSettingsCompanion copyWith({
+    Value<String>? ownerId,
     Value<bool?>? imageUploadConsent,
     Value<String?>? consentVersion,
     Value<DateTime?>? lastSuccessfulSyncAt,
@@ -3268,10 +3230,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     Value<String?>? lastSyncErrorCode,
     Value<String>? syncState,
     Value<int>? remoteRevision,
+    Value<int>? rowid,
   }) {
-    return AppSettingsCompanion(
-      id: id ?? this.id,
-      consentAccountId: consentAccountId ?? this.consentAccountId,
+    return AccountSyncSettingsCompanion(
+      ownerId: ownerId ?? this.ownerId,
       imageUploadConsent: imageUploadConsent ?? this.imageUploadConsent,
       consentVersion: consentVersion ?? this.consentVersion,
       lastSuccessfulSyncAt: lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
@@ -3280,17 +3242,15 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
       lastSyncErrorCode: lastSyncErrorCode ?? this.lastSyncErrorCode,
       syncState: syncState ?? this.syncState,
       remoteRevision: remoteRevision ?? this.remoteRevision,
+      rowid: rowid ?? this.rowid,
     );
   }
 
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (consentAccountId.present) {
-      map['consent_account_id'] = Variable<String>(consentAccountId.value);
+    if (ownerId.present) {
+      map['owner_id'] = Variable<String>(ownerId.value);
     }
     if (imageUploadConsent.present) {
       map['image_upload_consent'] = Variable<bool>(imageUploadConsent.value);
@@ -3318,14 +3278,16 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
     if (remoteRevision.present) {
       map['remote_revision'] = Variable<int>(remoteRevision.value);
     }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
     return map;
   }
 
   @override
   String toString() {
-    return (StringBuffer('AppSettingsCompanion(')
-          ..write('id: $id, ')
-          ..write('consentAccountId: $consentAccountId, ')
+    return (StringBuffer('AccountSyncSettingsCompanion(')
+          ..write('ownerId: $ownerId, ')
           ..write('imageUploadConsent: $imageUploadConsent, ')
           ..write('consentVersion: $consentVersion, ')
           ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt, ')
@@ -3333,7 +3295,1051 @@ class AppSettingsCompanion extends UpdateCompanion<AppSettingsRow> {
           ..write('syncCursorAt: $syncCursorAt, ')
           ..write('lastSyncErrorCode: $lastSyncErrorCode, ')
           ..write('syncState: $syncState, ')
-          ..write('remoteRevision: $remoteRevision')
+          ..write('remoteRevision: $remoteRevision, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $OfflineWorkspaceStatesTable extends OfflineWorkspaceStates
+    with TableInfo<$OfflineWorkspaceStatesTable, OfflineWorkspaceStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OfflineWorkspaceStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _installationIdMeta = const VerificationMeta(
+    'installationId',
+  );
+  @override
+  late final GeneratedColumn<String> installationId = GeneratedColumn<String>(
+    'installation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _generationMeta = const VerificationMeta(
+    'generation',
+  );
+  @override
+  late final GeneratedColumn<int> generation = GeneratedColumn<int>(
+    'generation',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pendingReleaseMeta = const VerificationMeta(
+    'pendingRelease',
+  );
+  @override
+  late final GeneratedColumn<bool> pendingRelease = GeneratedColumn<bool>(
+    'pending_release',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pending_release" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    installationId,
+    generation,
+    pendingRelease,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'offline_workspace_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OfflineWorkspaceStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('installation_id')) {
+      context.handle(
+        _installationIdMeta,
+        installationId.isAcceptableOrUnknown(
+          data['installation_id']!,
+          _installationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_installationIdMeta);
+    }
+    if (data.containsKey('generation')) {
+      context.handle(
+        _generationMeta,
+        generation.isAcceptableOrUnknown(data['generation']!, _generationMeta),
+      );
+    }
+    if (data.containsKey('pending_release')) {
+      context.handle(
+        _pendingReleaseMeta,
+        pendingRelease.isAcceptableOrUnknown(
+          data['pending_release']!,
+          _pendingReleaseMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  OfflineWorkspaceStateRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OfflineWorkspaceStateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      installationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}installation_id'],
+      )!,
+      generation: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}generation'],
+      )!,
+      pendingRelease: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pending_release'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OfflineWorkspaceStatesTable createAlias(String alias) {
+    return $OfflineWorkspaceStatesTable(attachedDatabase, alias);
+  }
+}
+
+class OfflineWorkspaceStateRow extends DataClass
+    implements Insertable<OfflineWorkspaceStateRow> {
+  final String id;
+  final String workspaceId;
+  final String installationId;
+  final int generation;
+  final bool pendingRelease;
+  final DateTime updatedAt;
+  const OfflineWorkspaceStateRow({
+    required this.id,
+    required this.workspaceId,
+    required this.installationId,
+    required this.generation,
+    required this.pendingRelease,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['installation_id'] = Variable<String>(installationId);
+    map['generation'] = Variable<int>(generation);
+    map['pending_release'] = Variable<bool>(pendingRelease);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  OfflineWorkspaceStatesCompanion toCompanion(bool nullToAbsent) {
+    return OfflineWorkspaceStatesCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      installationId: Value(installationId),
+      generation: Value(generation),
+      pendingRelease: Value(pendingRelease),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory OfflineWorkspaceStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OfflineWorkspaceStateRow(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      installationId: serializer.fromJson<String>(json['installationId']),
+      generation: serializer.fromJson<int>(json['generation']),
+      pendingRelease: serializer.fromJson<bool>(json['pendingRelease']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'installationId': serializer.toJson<String>(installationId),
+      'generation': serializer.toJson<int>(generation),
+      'pendingRelease': serializer.toJson<bool>(pendingRelease),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  OfflineWorkspaceStateRow copyWith({
+    String? id,
+    String? workspaceId,
+    String? installationId,
+    int? generation,
+    bool? pendingRelease,
+    DateTime? updatedAt,
+  }) => OfflineWorkspaceStateRow(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    installationId: installationId ?? this.installationId,
+    generation: generation ?? this.generation,
+    pendingRelease: pendingRelease ?? this.pendingRelease,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  OfflineWorkspaceStateRow copyWithCompanion(
+    OfflineWorkspaceStatesCompanion data,
+  ) {
+    return OfflineWorkspaceStateRow(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      installationId: data.installationId.present
+          ? data.installationId.value
+          : this.installationId,
+      generation: data.generation.present
+          ? data.generation.value
+          : this.generation,
+      pendingRelease: data.pendingRelease.present
+          ? data.pendingRelease.value
+          : this.pendingRelease,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OfflineWorkspaceStateRow(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('installationId: $installationId, ')
+          ..write('generation: $generation, ')
+          ..write('pendingRelease: $pendingRelease, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    workspaceId,
+    installationId,
+    generation,
+    pendingRelease,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OfflineWorkspaceStateRow &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.installationId == this.installationId &&
+          other.generation == this.generation &&
+          other.pendingRelease == this.pendingRelease &&
+          other.updatedAt == this.updatedAt);
+}
+
+class OfflineWorkspaceStatesCompanion
+    extends UpdateCompanion<OfflineWorkspaceStateRow> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> installationId;
+  final Value<int> generation;
+  final Value<bool> pendingRelease;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const OfflineWorkspaceStatesCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.installationId = const Value.absent(),
+    this.generation = const Value.absent(),
+    this.pendingRelease = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OfflineWorkspaceStatesCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String installationId,
+    this.generation = const Value.absent(),
+    this.pendingRelease = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       installationId = Value(installationId),
+       updatedAt = Value(updatedAt);
+  static Insertable<OfflineWorkspaceStateRow> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? installationId,
+    Expression<int>? generation,
+    Expression<bool>? pendingRelease,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (installationId != null) 'installation_id': installationId,
+      if (generation != null) 'generation': generation,
+      if (pendingRelease != null) 'pending_release': pendingRelease,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OfflineWorkspaceStatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<String>? installationId,
+    Value<int>? generation,
+    Value<bool>? pendingRelease,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return OfflineWorkspaceStatesCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      installationId: installationId ?? this.installationId,
+      generation: generation ?? this.generation,
+      pendingRelease: pendingRelease ?? this.pendingRelease,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (installationId.present) {
+      map['installation_id'] = Variable<String>(installationId.value);
+    }
+    if (generation.present) {
+      map['generation'] = Variable<int>(generation.value);
+    }
+    if (pendingRelease.present) {
+      map['pending_release'] = Variable<bool>(pendingRelease.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OfflineWorkspaceStatesCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('installationId: $installationId, ')
+          ..write('generation: $generation, ')
+          ..write('pendingRelease: $pendingRelease, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DetachedEntityOriginsTable extends DetachedEntityOrigins
+    with TableInfo<$DetachedEntityOriginsTable, DetachedEntityOriginRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DetachedEntityOriginsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _generationMeta = const VerificationMeta(
+    'generation',
+  );
+  @override
+  late final GeneratedColumn<int> generation = GeneratedColumn<int>(
+    'generation',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityTypeMeta = const VerificationMeta(
+    'entityType',
+  );
+  @override
+  late final GeneratedColumn<String> entityType = GeneratedColumn<String>(
+    'entity_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _guestEntityIdMeta = const VerificationMeta(
+    'guestEntityId',
+  );
+  @override
+  late final GeneratedColumn<String> guestEntityId = GeneratedColumn<String>(
+    'guest_entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originalOwnerIdMeta = const VerificationMeta(
+    'originalOwnerId',
+  );
+  @override
+  late final GeneratedColumn<String> originalOwnerId = GeneratedColumn<String>(
+    'original_owner_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originalEntityIdMeta = const VerificationMeta(
+    'originalEntityId',
+  );
+  @override
+  late final GeneratedColumn<String> originalEntityId = GeneratedColumn<String>(
+    'original_entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originalRemoteRevisionMeta =
+      const VerificationMeta('originalRemoteRevision');
+  @override
+  late final GeneratedColumn<int> originalRemoteRevision = GeneratedColumn<int>(
+    'original_remote_revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detachedAtMeta = const VerificationMeta(
+    'detachedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detachedAt = GeneratedColumn<DateTime>(
+    'detached_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    workspaceId,
+    generation,
+    entityType,
+    guestEntityId,
+    originalOwnerId,
+    originalEntityId,
+    originalRemoteRevision,
+    detachedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'detached_entity_origins';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DetachedEntityOriginRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('generation')) {
+      context.handle(
+        _generationMeta,
+        generation.isAcceptableOrUnknown(data['generation']!, _generationMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_generationMeta);
+    }
+    if (data.containsKey('entity_type')) {
+      context.handle(
+        _entityTypeMeta,
+        entityType.isAcceptableOrUnknown(data['entity_type']!, _entityTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTypeMeta);
+    }
+    if (data.containsKey('guest_entity_id')) {
+      context.handle(
+        _guestEntityIdMeta,
+        guestEntityId.isAcceptableOrUnknown(
+          data['guest_entity_id']!,
+          _guestEntityIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_guestEntityIdMeta);
+    }
+    if (data.containsKey('original_owner_id')) {
+      context.handle(
+        _originalOwnerIdMeta,
+        originalOwnerId.isAcceptableOrUnknown(
+          data['original_owner_id']!,
+          _originalOwnerIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_originalOwnerIdMeta);
+    }
+    if (data.containsKey('original_entity_id')) {
+      context.handle(
+        _originalEntityIdMeta,
+        originalEntityId.isAcceptableOrUnknown(
+          data['original_entity_id']!,
+          _originalEntityIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_originalEntityIdMeta);
+    }
+    if (data.containsKey('original_remote_revision')) {
+      context.handle(
+        _originalRemoteRevisionMeta,
+        originalRemoteRevision.isAcceptableOrUnknown(
+          data['original_remote_revision']!,
+          _originalRemoteRevisionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_originalRemoteRevisionMeta);
+    }
+    if (data.containsKey('detached_at')) {
+      context.handle(
+        _detachedAtMeta,
+        detachedAt.isAcceptableOrUnknown(data['detached_at']!, _detachedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_detachedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DetachedEntityOriginRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DetachedEntityOriginRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      generation: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}generation'],
+      )!,
+      entityType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_type'],
+      )!,
+      guestEntityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}guest_entity_id'],
+      )!,
+      originalOwnerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}original_owner_id'],
+      )!,
+      originalEntityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}original_entity_id'],
+      )!,
+      originalRemoteRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}original_remote_revision'],
+      )!,
+      detachedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detached_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DetachedEntityOriginsTable createAlias(String alias) {
+    return $DetachedEntityOriginsTable(attachedDatabase, alias);
+  }
+}
+
+class DetachedEntityOriginRow extends DataClass
+    implements Insertable<DetachedEntityOriginRow> {
+  final String id;
+  final String workspaceId;
+  final int generation;
+  final String entityType;
+  final String guestEntityId;
+  final String originalOwnerId;
+  final String originalEntityId;
+  final int originalRemoteRevision;
+  final DateTime detachedAt;
+  const DetachedEntityOriginRow({
+    required this.id,
+    required this.workspaceId,
+    required this.generation,
+    required this.entityType,
+    required this.guestEntityId,
+    required this.originalOwnerId,
+    required this.originalEntityId,
+    required this.originalRemoteRevision,
+    required this.detachedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['generation'] = Variable<int>(generation);
+    map['entity_type'] = Variable<String>(entityType);
+    map['guest_entity_id'] = Variable<String>(guestEntityId);
+    map['original_owner_id'] = Variable<String>(originalOwnerId);
+    map['original_entity_id'] = Variable<String>(originalEntityId);
+    map['original_remote_revision'] = Variable<int>(originalRemoteRevision);
+    map['detached_at'] = Variable<DateTime>(detachedAt);
+    return map;
+  }
+
+  DetachedEntityOriginsCompanion toCompanion(bool nullToAbsent) {
+    return DetachedEntityOriginsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      generation: Value(generation),
+      entityType: Value(entityType),
+      guestEntityId: Value(guestEntityId),
+      originalOwnerId: Value(originalOwnerId),
+      originalEntityId: Value(originalEntityId),
+      originalRemoteRevision: Value(originalRemoteRevision),
+      detachedAt: Value(detachedAt),
+    );
+  }
+
+  factory DetachedEntityOriginRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DetachedEntityOriginRow(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      generation: serializer.fromJson<int>(json['generation']),
+      entityType: serializer.fromJson<String>(json['entityType']),
+      guestEntityId: serializer.fromJson<String>(json['guestEntityId']),
+      originalOwnerId: serializer.fromJson<String>(json['originalOwnerId']),
+      originalEntityId: serializer.fromJson<String>(json['originalEntityId']),
+      originalRemoteRevision: serializer.fromJson<int>(
+        json['originalRemoteRevision'],
+      ),
+      detachedAt: serializer.fromJson<DateTime>(json['detachedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'generation': serializer.toJson<int>(generation),
+      'entityType': serializer.toJson<String>(entityType),
+      'guestEntityId': serializer.toJson<String>(guestEntityId),
+      'originalOwnerId': serializer.toJson<String>(originalOwnerId),
+      'originalEntityId': serializer.toJson<String>(originalEntityId),
+      'originalRemoteRevision': serializer.toJson<int>(originalRemoteRevision),
+      'detachedAt': serializer.toJson<DateTime>(detachedAt),
+    };
+  }
+
+  DetachedEntityOriginRow copyWith({
+    String? id,
+    String? workspaceId,
+    int? generation,
+    String? entityType,
+    String? guestEntityId,
+    String? originalOwnerId,
+    String? originalEntityId,
+    int? originalRemoteRevision,
+    DateTime? detachedAt,
+  }) => DetachedEntityOriginRow(
+    id: id ?? this.id,
+    workspaceId: workspaceId ?? this.workspaceId,
+    generation: generation ?? this.generation,
+    entityType: entityType ?? this.entityType,
+    guestEntityId: guestEntityId ?? this.guestEntityId,
+    originalOwnerId: originalOwnerId ?? this.originalOwnerId,
+    originalEntityId: originalEntityId ?? this.originalEntityId,
+    originalRemoteRevision:
+        originalRemoteRevision ?? this.originalRemoteRevision,
+    detachedAt: detachedAt ?? this.detachedAt,
+  );
+  DetachedEntityOriginRow copyWithCompanion(
+    DetachedEntityOriginsCompanion data,
+  ) {
+    return DetachedEntityOriginRow(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      generation: data.generation.present
+          ? data.generation.value
+          : this.generation,
+      entityType: data.entityType.present
+          ? data.entityType.value
+          : this.entityType,
+      guestEntityId: data.guestEntityId.present
+          ? data.guestEntityId.value
+          : this.guestEntityId,
+      originalOwnerId: data.originalOwnerId.present
+          ? data.originalOwnerId.value
+          : this.originalOwnerId,
+      originalEntityId: data.originalEntityId.present
+          ? data.originalEntityId.value
+          : this.originalEntityId,
+      originalRemoteRevision: data.originalRemoteRevision.present
+          ? data.originalRemoteRevision.value
+          : this.originalRemoteRevision,
+      detachedAt: data.detachedAt.present
+          ? data.detachedAt.value
+          : this.detachedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DetachedEntityOriginRow(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('generation: $generation, ')
+          ..write('entityType: $entityType, ')
+          ..write('guestEntityId: $guestEntityId, ')
+          ..write('originalOwnerId: $originalOwnerId, ')
+          ..write('originalEntityId: $originalEntityId, ')
+          ..write('originalRemoteRevision: $originalRemoteRevision, ')
+          ..write('detachedAt: $detachedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    workspaceId,
+    generation,
+    entityType,
+    guestEntityId,
+    originalOwnerId,
+    originalEntityId,
+    originalRemoteRevision,
+    detachedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DetachedEntityOriginRow &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.generation == this.generation &&
+          other.entityType == this.entityType &&
+          other.guestEntityId == this.guestEntityId &&
+          other.originalOwnerId == this.originalOwnerId &&
+          other.originalEntityId == this.originalEntityId &&
+          other.originalRemoteRevision == this.originalRemoteRevision &&
+          other.detachedAt == this.detachedAt);
+}
+
+class DetachedEntityOriginsCompanion
+    extends UpdateCompanion<DetachedEntityOriginRow> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<int> generation;
+  final Value<String> entityType;
+  final Value<String> guestEntityId;
+  final Value<String> originalOwnerId;
+  final Value<String> originalEntityId;
+  final Value<int> originalRemoteRevision;
+  final Value<DateTime> detachedAt;
+  final Value<int> rowid;
+  const DetachedEntityOriginsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.generation = const Value.absent(),
+    this.entityType = const Value.absent(),
+    this.guestEntityId = const Value.absent(),
+    this.originalOwnerId = const Value.absent(),
+    this.originalEntityId = const Value.absent(),
+    this.originalRemoteRevision = const Value.absent(),
+    this.detachedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DetachedEntityOriginsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required int generation,
+    required String entityType,
+    required String guestEntityId,
+    required String originalOwnerId,
+    required String originalEntityId,
+    required int originalRemoteRevision,
+    required DateTime detachedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       workspaceId = Value(workspaceId),
+       generation = Value(generation),
+       entityType = Value(entityType),
+       guestEntityId = Value(guestEntityId),
+       originalOwnerId = Value(originalOwnerId),
+       originalEntityId = Value(originalEntityId),
+       originalRemoteRevision = Value(originalRemoteRevision),
+       detachedAt = Value(detachedAt);
+  static Insertable<DetachedEntityOriginRow> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<int>? generation,
+    Expression<String>? entityType,
+    Expression<String>? guestEntityId,
+    Expression<String>? originalOwnerId,
+    Expression<String>? originalEntityId,
+    Expression<int>? originalRemoteRevision,
+    Expression<DateTime>? detachedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (generation != null) 'generation': generation,
+      if (entityType != null) 'entity_type': entityType,
+      if (guestEntityId != null) 'guest_entity_id': guestEntityId,
+      if (originalOwnerId != null) 'original_owner_id': originalOwnerId,
+      if (originalEntityId != null) 'original_entity_id': originalEntityId,
+      if (originalRemoteRevision != null)
+        'original_remote_revision': originalRemoteRevision,
+      if (detachedAt != null) 'detached_at': detachedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DetachedEntityOriginsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? workspaceId,
+    Value<int>? generation,
+    Value<String>? entityType,
+    Value<String>? guestEntityId,
+    Value<String>? originalOwnerId,
+    Value<String>? originalEntityId,
+    Value<int>? originalRemoteRevision,
+    Value<DateTime>? detachedAt,
+    Value<int>? rowid,
+  }) {
+    return DetachedEntityOriginsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      generation: generation ?? this.generation,
+      entityType: entityType ?? this.entityType,
+      guestEntityId: guestEntityId ?? this.guestEntityId,
+      originalOwnerId: originalOwnerId ?? this.originalOwnerId,
+      originalEntityId: originalEntityId ?? this.originalEntityId,
+      originalRemoteRevision:
+          originalRemoteRevision ?? this.originalRemoteRevision,
+      detachedAt: detachedAt ?? this.detachedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (generation.present) {
+      map['generation'] = Variable<int>(generation.value);
+    }
+    if (entityType.present) {
+      map['entity_type'] = Variable<String>(entityType.value);
+    }
+    if (guestEntityId.present) {
+      map['guest_entity_id'] = Variable<String>(guestEntityId.value);
+    }
+    if (originalOwnerId.present) {
+      map['original_owner_id'] = Variable<String>(originalOwnerId.value);
+    }
+    if (originalEntityId.present) {
+      map['original_entity_id'] = Variable<String>(originalEntityId.value);
+    }
+    if (originalRemoteRevision.present) {
+      map['original_remote_revision'] = Variable<int>(
+        originalRemoteRevision.value,
+      );
+    }
+    if (detachedAt.present) {
+      map['detached_at'] = Variable<DateTime>(detachedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DetachedEntityOriginsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('generation: $generation, ')
+          ..write('entityType: $entityType, ')
+          ..write('guestEntityId: $guestEntityId, ')
+          ..write('originalOwnerId: $originalOwnerId, ')
+          ..write('originalEntityId: $originalEntityId, ')
+          ..write('originalRemoteRevision: $originalRemoteRevision, ')
+          ..write('detachedAt: $detachedAt, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -3345,7 +4351,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BatchesTable batches = $BatchesTable(this);
   late final $ScanRecordsTable scanRecords = $ScanRecordsTable(this);
   late final $OrdersTable orders = $OrdersTable(this);
-  late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $AccountSyncSettingsTable accountSyncSettings =
+      $AccountSyncSettingsTable(this);
+  late final $OfflineWorkspaceStatesTable offlineWorkspaceStates =
+      $OfflineWorkspaceStatesTable(this);
+  late final $DetachedEntityOriginsTable detachedEntityOrigins =
+      $DetachedEntityOriginsTable(this);
   late final Index batchesOwnerIdx = Index(
     'batches_owner_idx',
     'CREATE INDEX batches_owner_idx ON batches (owner_id)',
@@ -3390,6 +4401,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'orders_updated_idx',
     'CREATE INDEX orders_updated_idx ON orders (updated_at)',
   );
+  late final Index detachedEntityOriginsWorkspaceIdx = Index(
+    'detached_entity_origins_workspace_idx',
+    'CREATE INDEX detached_entity_origins_workspace_idx ON detached_entity_origins (workspace_id, generation)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3398,7 +4413,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     batches,
     scanRecords,
     orders,
-    appSettings,
+    accountSyncSettings,
+    offlineWorkspaceStates,
+    detachedEntityOrigins,
     batchesOwnerIdx,
     batchesUpdatedIdx,
     batchesActivePageIdx,
@@ -3410,6 +4427,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     scanRecordsBatchPageIdx,
     ordersOwnerIdx,
     ordersUpdatedIdx,
+    detachedEntityOriginsWorkspaceIdx,
   ];
 }
 
@@ -5033,10 +6051,9 @@ typedef $$OrdersTableProcessedTableManager =
       OrderRow,
       PrefetchHooks Function({bool batchId})
     >;
-typedef $$AppSettingsTableCreateCompanionBuilder =
-    AppSettingsCompanion Function({
-      Value<int> id,
-      Value<String?> consentAccountId,
+typedef $$AccountSyncSettingsTableCreateCompanionBuilder =
+    AccountSyncSettingsCompanion Function({
+      required String ownerId,
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
@@ -5045,11 +6062,11 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String?> lastSyncErrorCode,
       Value<String> syncState,
       Value<int> remoteRevision,
+      Value<int> rowid,
     });
-typedef $$AppSettingsTableUpdateCompanionBuilder =
-    AppSettingsCompanion Function({
-      Value<int> id,
-      Value<String?> consentAccountId,
+typedef $$AccountSyncSettingsTableUpdateCompanionBuilder =
+    AccountSyncSettingsCompanion Function({
+      Value<String> ownerId,
       Value<bool?> imageUploadConsent,
       Value<String?> consentVersion,
       Value<DateTime?> lastSuccessfulSyncAt,
@@ -5058,24 +6075,20 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String?> lastSyncErrorCode,
       Value<String> syncState,
       Value<int> remoteRevision,
+      Value<int> rowid,
     });
 
-class $$AppSettingsTableFilterComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableFilterComposer({
+class $$AccountSyncSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AccountSyncSettingsTable> {
+  $$AccountSyncSettingsTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get consentAccountId => $composableBuilder(
-    column: $table.consentAccountId,
+  ColumnFilters<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5120,22 +6133,17 @@ class $$AppSettingsTableFilterComposer
   );
 }
 
-class $$AppSettingsTableOrderingComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableOrderingComposer({
+class $$AccountSyncSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AccountSyncSettingsTable> {
+  $$AccountSyncSettingsTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get consentAccountId => $composableBuilder(
-    column: $table.consentAccountId,
+  ColumnOrderings<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5180,22 +6188,17 @@ class $$AppSettingsTableOrderingComposer
   );
 }
 
-class $$AppSettingsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableAnnotationComposer({
+class $$AccountSyncSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AccountSyncSettingsTable> {
+  $$AccountSyncSettingsTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get consentAccountId => $composableBuilder(
-    column: $table.consentAccountId,
-    builder: (column) => column,
-  );
+  GeneratedColumn<String> get ownerId =>
+      $composableBuilder(column: $table.ownerId, builder: (column) => column);
 
   GeneratedColumn<bool> get imageUploadConsent => $composableBuilder(
     column: $table.imageUploadConsent,
@@ -5236,39 +6239,50 @@ class $$AppSettingsTableAnnotationComposer
   );
 }
 
-class $$AppSettingsTableTableManager
+class $$AccountSyncSettingsTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $AppSettingsTable,
-          AppSettingsRow,
-          $$AppSettingsTableFilterComposer,
-          $$AppSettingsTableOrderingComposer,
-          $$AppSettingsTableAnnotationComposer,
-          $$AppSettingsTableCreateCompanionBuilder,
-          $$AppSettingsTableUpdateCompanionBuilder,
+          $AccountSyncSettingsTable,
+          AccountSyncSettingsRow,
+          $$AccountSyncSettingsTableFilterComposer,
+          $$AccountSyncSettingsTableOrderingComposer,
+          $$AccountSyncSettingsTableAnnotationComposer,
+          $$AccountSyncSettingsTableCreateCompanionBuilder,
+          $$AccountSyncSettingsTableUpdateCompanionBuilder,
           (
-            AppSettingsRow,
-            BaseReferences<_$AppDatabase, $AppSettingsTable, AppSettingsRow>,
+            AccountSyncSettingsRow,
+            BaseReferences<
+              _$AppDatabase,
+              $AccountSyncSettingsTable,
+              AccountSyncSettingsRow
+            >,
           ),
-          AppSettingsRow,
+          AccountSyncSettingsRow,
           PrefetchHooks Function()
         > {
-  $$AppSettingsTableTableManager(_$AppDatabase db, $AppSettingsTable table)
-    : super(
+  $$AccountSyncSettingsTableTableManager(
+    _$AppDatabase db,
+    $AccountSyncSettingsTable table,
+  ) : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$AppSettingsTableFilterComposer($db: db, $table: table),
+              $$AccountSyncSettingsTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$AppSettingsTableOrderingComposer($db: db, $table: table),
+              $$AccountSyncSettingsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
           createComputedFieldComposer: () =>
-              $$AppSettingsTableAnnotationComposer($db: db, $table: table),
+              $$AccountSyncSettingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
           updateCompanionCallback:
               ({
-                Value<int> id = const Value.absent(),
-                Value<String?> consentAccountId = const Value.absent(),
+                Value<String> ownerId = const Value.absent(),
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -5277,9 +6291,9 @@ class $$AppSettingsTableTableManager
                 Value<String?> lastSyncErrorCode = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
                 Value<int> remoteRevision = const Value.absent(),
-              }) => AppSettingsCompanion(
-                id: id,
-                consentAccountId: consentAccountId,
+                Value<int> rowid = const Value.absent(),
+              }) => AccountSyncSettingsCompanion(
+                ownerId: ownerId,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
@@ -5288,11 +6302,11 @@ class $$AppSettingsTableTableManager
                 lastSyncErrorCode: lastSyncErrorCode,
                 syncState: syncState,
                 remoteRevision: remoteRevision,
+                rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                Value<int> id = const Value.absent(),
-                Value<String?> consentAccountId = const Value.absent(),
+                required String ownerId,
                 Value<bool?> imageUploadConsent = const Value.absent(),
                 Value<String?> consentVersion = const Value.absent(),
                 Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
@@ -5301,9 +6315,9 @@ class $$AppSettingsTableTableManager
                 Value<String?> lastSyncErrorCode = const Value.absent(),
                 Value<String> syncState = const Value.absent(),
                 Value<int> remoteRevision = const Value.absent(),
-              }) => AppSettingsCompanion.insert(
-                id: id,
-                consentAccountId: consentAccountId,
+                Value<int> rowid = const Value.absent(),
+              }) => AccountSyncSettingsCompanion.insert(
+                ownerId: ownerId,
                 imageUploadConsent: imageUploadConsent,
                 consentVersion: consentVersion,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
@@ -5312,6 +6326,7 @@ class $$AppSettingsTableTableManager
                 lastSyncErrorCode: lastSyncErrorCode,
                 syncState: syncState,
                 remoteRevision: remoteRevision,
+                rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -5321,21 +6336,582 @@ class $$AppSettingsTableTableManager
       );
 }
 
-typedef $$AppSettingsTableProcessedTableManager =
+typedef $$AccountSyncSettingsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $AppSettingsTable,
-      AppSettingsRow,
-      $$AppSettingsTableFilterComposer,
-      $$AppSettingsTableOrderingComposer,
-      $$AppSettingsTableAnnotationComposer,
-      $$AppSettingsTableCreateCompanionBuilder,
-      $$AppSettingsTableUpdateCompanionBuilder,
+      $AccountSyncSettingsTable,
+      AccountSyncSettingsRow,
+      $$AccountSyncSettingsTableFilterComposer,
+      $$AccountSyncSettingsTableOrderingComposer,
+      $$AccountSyncSettingsTableAnnotationComposer,
+      $$AccountSyncSettingsTableCreateCompanionBuilder,
+      $$AccountSyncSettingsTableUpdateCompanionBuilder,
       (
-        AppSettingsRow,
-        BaseReferences<_$AppDatabase, $AppSettingsTable, AppSettingsRow>,
+        AccountSyncSettingsRow,
+        BaseReferences<
+          _$AppDatabase,
+          $AccountSyncSettingsTable,
+          AccountSyncSettingsRow
+        >,
       ),
-      AppSettingsRow,
+      AccountSyncSettingsRow,
+      PrefetchHooks Function()
+    >;
+typedef $$OfflineWorkspaceStatesTableCreateCompanionBuilder =
+    OfflineWorkspaceStatesCompanion Function({
+      required String id,
+      required String workspaceId,
+      required String installationId,
+      Value<int> generation,
+      Value<bool> pendingRelease,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$OfflineWorkspaceStatesTableUpdateCompanionBuilder =
+    OfflineWorkspaceStatesCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<String> installationId,
+      Value<int> generation,
+      Value<bool> pendingRelease,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$OfflineWorkspaceStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $OfflineWorkspaceStatesTable> {
+  $$OfflineWorkspaceStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get installationId => $composableBuilder(
+    column: $table.installationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pendingRelease => $composableBuilder(
+    column: $table.pendingRelease,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$OfflineWorkspaceStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $OfflineWorkspaceStatesTable> {
+  $$OfflineWorkspaceStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get installationId => $composableBuilder(
+    column: $table.installationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pendingRelease => $composableBuilder(
+    column: $table.pendingRelease,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$OfflineWorkspaceStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OfflineWorkspaceStatesTable> {
+  $$OfflineWorkspaceStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get installationId => $composableBuilder(
+    column: $table.installationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pendingRelease => $composableBuilder(
+    column: $table.pendingRelease,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$OfflineWorkspaceStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OfflineWorkspaceStatesTable,
+          OfflineWorkspaceStateRow,
+          $$OfflineWorkspaceStatesTableFilterComposer,
+          $$OfflineWorkspaceStatesTableOrderingComposer,
+          $$OfflineWorkspaceStatesTableAnnotationComposer,
+          $$OfflineWorkspaceStatesTableCreateCompanionBuilder,
+          $$OfflineWorkspaceStatesTableUpdateCompanionBuilder,
+          (
+            OfflineWorkspaceStateRow,
+            BaseReferences<
+              _$AppDatabase,
+              $OfflineWorkspaceStatesTable,
+              OfflineWorkspaceStateRow
+            >,
+          ),
+          OfflineWorkspaceStateRow,
+          PrefetchHooks Function()
+        > {
+  $$OfflineWorkspaceStatesTableTableManager(
+    _$AppDatabase db,
+    $OfflineWorkspaceStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OfflineWorkspaceStatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$OfflineWorkspaceStatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$OfflineWorkspaceStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> installationId = const Value.absent(),
+                Value<int> generation = const Value.absent(),
+                Value<bool> pendingRelease = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OfflineWorkspaceStatesCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                installationId: installationId,
+                generation: generation,
+                pendingRelease: pendingRelease,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                required String installationId,
+                Value<int> generation = const Value.absent(),
+                Value<bool> pendingRelease = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => OfflineWorkspaceStatesCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                installationId: installationId,
+                generation: generation,
+                pendingRelease: pendingRelease,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$OfflineWorkspaceStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OfflineWorkspaceStatesTable,
+      OfflineWorkspaceStateRow,
+      $$OfflineWorkspaceStatesTableFilterComposer,
+      $$OfflineWorkspaceStatesTableOrderingComposer,
+      $$OfflineWorkspaceStatesTableAnnotationComposer,
+      $$OfflineWorkspaceStatesTableCreateCompanionBuilder,
+      $$OfflineWorkspaceStatesTableUpdateCompanionBuilder,
+      (
+        OfflineWorkspaceStateRow,
+        BaseReferences<
+          _$AppDatabase,
+          $OfflineWorkspaceStatesTable,
+          OfflineWorkspaceStateRow
+        >,
+      ),
+      OfflineWorkspaceStateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$DetachedEntityOriginsTableCreateCompanionBuilder =
+    DetachedEntityOriginsCompanion Function({
+      required String id,
+      required String workspaceId,
+      required int generation,
+      required String entityType,
+      required String guestEntityId,
+      required String originalOwnerId,
+      required String originalEntityId,
+      required int originalRemoteRevision,
+      required DateTime detachedAt,
+      Value<int> rowid,
+    });
+typedef $$DetachedEntityOriginsTableUpdateCompanionBuilder =
+    DetachedEntityOriginsCompanion Function({
+      Value<String> id,
+      Value<String> workspaceId,
+      Value<int> generation,
+      Value<String> entityType,
+      Value<String> guestEntityId,
+      Value<String> originalOwnerId,
+      Value<String> originalEntityId,
+      Value<int> originalRemoteRevision,
+      Value<DateTime> detachedAt,
+      Value<int> rowid,
+    });
+
+class $$DetachedEntityOriginsTableFilterComposer
+    extends Composer<_$AppDatabase, $DetachedEntityOriginsTable> {
+  $$DetachedEntityOriginsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get guestEntityId => $composableBuilder(
+    column: $table.guestEntityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get originalOwnerId => $composableBuilder(
+    column: $table.originalOwnerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get originalEntityId => $composableBuilder(
+    column: $table.originalEntityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get originalRemoteRevision => $composableBuilder(
+    column: $table.originalRemoteRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detachedAt => $composableBuilder(
+    column: $table.detachedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DetachedEntityOriginsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DetachedEntityOriginsTable> {
+  $$DetachedEntityOriginsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get guestEntityId => $composableBuilder(
+    column: $table.guestEntityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get originalOwnerId => $composableBuilder(
+    column: $table.originalOwnerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get originalEntityId => $composableBuilder(
+    column: $table.originalEntityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get originalRemoteRevision => $composableBuilder(
+    column: $table.originalRemoteRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detachedAt => $composableBuilder(
+    column: $table.detachedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DetachedEntityOriginsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DetachedEntityOriginsTable> {
+  $$DetachedEntityOriginsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityType => $composableBuilder(
+    column: $table.entityType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get guestEntityId => $composableBuilder(
+    column: $table.guestEntityId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get originalOwnerId => $composableBuilder(
+    column: $table.originalOwnerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get originalEntityId => $composableBuilder(
+    column: $table.originalEntityId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get originalRemoteRevision => $composableBuilder(
+    column: $table.originalRemoteRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get detachedAt => $composableBuilder(
+    column: $table.detachedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$DetachedEntityOriginsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DetachedEntityOriginsTable,
+          DetachedEntityOriginRow,
+          $$DetachedEntityOriginsTableFilterComposer,
+          $$DetachedEntityOriginsTableOrderingComposer,
+          $$DetachedEntityOriginsTableAnnotationComposer,
+          $$DetachedEntityOriginsTableCreateCompanionBuilder,
+          $$DetachedEntityOriginsTableUpdateCompanionBuilder,
+          (
+            DetachedEntityOriginRow,
+            BaseReferences<
+              _$AppDatabase,
+              $DetachedEntityOriginsTable,
+              DetachedEntityOriginRow
+            >,
+          ),
+          DetachedEntityOriginRow,
+          PrefetchHooks Function()
+        > {
+  $$DetachedEntityOriginsTableTableManager(
+    _$AppDatabase db,
+    $DetachedEntityOriginsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DetachedEntityOriginsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$DetachedEntityOriginsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$DetachedEntityOriginsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<int> generation = const Value.absent(),
+                Value<String> entityType = const Value.absent(),
+                Value<String> guestEntityId = const Value.absent(),
+                Value<String> originalOwnerId = const Value.absent(),
+                Value<String> originalEntityId = const Value.absent(),
+                Value<int> originalRemoteRevision = const Value.absent(),
+                Value<DateTime> detachedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DetachedEntityOriginsCompanion(
+                id: id,
+                workspaceId: workspaceId,
+                generation: generation,
+                entityType: entityType,
+                guestEntityId: guestEntityId,
+                originalOwnerId: originalOwnerId,
+                originalEntityId: originalEntityId,
+                originalRemoteRevision: originalRemoteRevision,
+                detachedAt: detachedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String workspaceId,
+                required int generation,
+                required String entityType,
+                required String guestEntityId,
+                required String originalOwnerId,
+                required String originalEntityId,
+                required int originalRemoteRevision,
+                required DateTime detachedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => DetachedEntityOriginsCompanion.insert(
+                id: id,
+                workspaceId: workspaceId,
+                generation: generation,
+                entityType: entityType,
+                guestEntityId: guestEntityId,
+                originalOwnerId: originalOwnerId,
+                originalEntityId: originalEntityId,
+                originalRemoteRevision: originalRemoteRevision,
+                detachedAt: detachedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DetachedEntityOriginsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DetachedEntityOriginsTable,
+      DetachedEntityOriginRow,
+      $$DetachedEntityOriginsTableFilterComposer,
+      $$DetachedEntityOriginsTableOrderingComposer,
+      $$DetachedEntityOriginsTableAnnotationComposer,
+      $$DetachedEntityOriginsTableCreateCompanionBuilder,
+      $$DetachedEntityOriginsTableUpdateCompanionBuilder,
+      (
+        DetachedEntityOriginRow,
+        BaseReferences<
+          _$AppDatabase,
+          $DetachedEntityOriginsTable,
+          DetachedEntityOriginRow
+        >,
+      ),
+      DetachedEntityOriginRow,
       PrefetchHooks Function()
     >;
 
@@ -5348,6 +6924,13 @@ class $AppDatabaseManager {
       $$ScanRecordsTableTableManager(_db, _db.scanRecords);
   $$OrdersTableTableManager get orders =>
       $$OrdersTableTableManager(_db, _db.orders);
-  $$AppSettingsTableTableManager get appSettings =>
-      $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$AccountSyncSettingsTableTableManager get accountSyncSettings =>
+      $$AccountSyncSettingsTableTableManager(_db, _db.accountSyncSettings);
+  $$OfflineWorkspaceStatesTableTableManager get offlineWorkspaceStates =>
+      $$OfflineWorkspaceStatesTableTableManager(
+        _db,
+        _db.offlineWorkspaceStates,
+      );
+  $$DetachedEntityOriginsTableTableManager get detachedEntityOrigins =>
+      $$DetachedEntityOriginsTableTableManager(_db, _db.detachedEntityOrigins);
 }
