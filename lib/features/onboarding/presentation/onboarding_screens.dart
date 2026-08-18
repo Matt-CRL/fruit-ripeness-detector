@@ -7,7 +7,9 @@ import 'package:kami/features/auth/application/auth_providers.dart';
 import 'package:kami/features/startup/domain/startup_preferences.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({super.key, this.openedFromAccountChoice = false});
+
+  final bool openedFromAccountChoice;
 
   @override
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -84,7 +86,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       await ref.read(authRepositoryProvider).signOut(localOnly: true);
     }
     if (mounted) {
-      context.go(AppRoutes.accountChoice);
+      if (widget.openedFromAccountChoice) {
+        // Account Choice used context.push and awaits this route. Pop so that
+        // its pending Future completes and its loading state is cleared.
+        context.pop();
+      } else {
+        context.go(AppRoutes.accountChoice);
+      }
     }
   }
 

@@ -25,7 +25,7 @@ class _AccountChoiceScreenState extends ConsumerState<AccountChoiceScreen> {
     try {
       await ref.read(startupPreferencesProvider).selectGuest();
       if (mounted) {
-        await context.push(AppRoutes.onboarding);
+        await context.push('${AppRoutes.onboarding}?from=account-choice');
       }
     } on Object {
       if (mounted) {

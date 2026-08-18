@@ -628,6 +628,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          _ProfileAppearanceSection(
+            themeMode: themeMode,
+            onChanged: _setDarkMode,
+          ),
           if (linkedOwnerId != null) ...[
             const SizedBox(height: 24),
             Text(
@@ -647,45 +652,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: colorScheme.primaryContainer,
-                child: Icon(
-                  themeMode == ThemeMode.dark
-                      ? Icons.dark_mode_outlined
-                      : Icons.light_mode_outlined,
-                  color: colorScheme.primary,
-                ),
-              ),
-              title: Text(
-                themeMode == ThemeMode.dark ? 'Dark mode' : 'Light mode',
-              ),
-              subtitle: Text(
-                themeMode == ThemeMode.dark
-                    ? 'Dark colors are active'
-                    : 'Light colors are active',
-              ),
-              trailing: Switch(
-                value: themeMode == ThemeMode.dark,
-                onChanged: _setDarkMode,
-                thumbColor: WidgetStateProperty.resolveWith((states) {
-                  return states.contains(WidgetState.selected)
-                      ? colorScheme.onPrimary
-                      : colorScheme.primary;
-                }),
-                trackColor: WidgetStateProperty.resolveWith((states) {
-                  return states.contains(WidgetState.selected)
-                      ? colorScheme.primary
-                      : colorScheme.surfaceContainerHighest;
-                }),
-                trackOutlineColor: WidgetStatePropertyAll(colorScheme.outline),
-              ),
-            ),
-          ),
           const SizedBox(height: 24),
           Text('Guest session', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
@@ -802,6 +768,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               subtitle: Text(accountEmail),
             ),
           ),
+          const SizedBox(height: 24),
+          _ProfileAppearanceSection(
+            themeMode: themeMode,
+            onChanged: _setDarkMode,
+          ),
           if (isLinkedWorkspace) ...[
             const SizedBox(height: 24),
             Text(
@@ -896,23 +867,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          Card(
-            child: SwitchListTile(
-              value: themeMode == ThemeMode.dark,
-              onChanged: _setDarkMode,
-              secondary: Icon(
-                themeMode == ThemeMode.dark
-                    ? Icons.dark_mode_outlined
-                    : Icons.light_mode_outlined,
-              ),
-              title: Text(
-                themeMode == ThemeMode.dark ? 'Dark mode' : 'Light mode',
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
           Text('Account', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 10),
           Card(
@@ -941,6 +895,59 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ProfileAppearanceSection extends StatelessWidget {
+  const _ProfileAppearanceSection({
+    required this.themeMode,
+    required this.onChanged,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = themeMode == ThemeMode.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 10),
+        Card(
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: colorScheme.primaryContainer,
+              child: Icon(
+                isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                color: colorScheme.primary,
+              ),
+            ),
+            title: Text(isDark ? 'Dark mode' : 'Light mode'),
+            subtitle: Text(
+              isDark ? 'Dark colors are active' : 'Light colors are active',
+            ),
+            trailing: Switch(
+              value: isDark,
+              onChanged: onChanged,
+              thumbColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? colorScheme.onPrimary
+                    : colorScheme.primary;
+              }),
+              trackColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? colorScheme.primary
+                    : colorScheme.surfaceContainerHighest;
+              }),
+              trackOutlineColor: WidgetStatePropertyAll(colorScheme.outline),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

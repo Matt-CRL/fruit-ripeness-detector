@@ -42,7 +42,9 @@ part of this repository.
   and same-fruit batches; slides use one action, swipe-back, viewport-fitted
   cards, and a transparent progress/action area
 - Home, Batches, History, and Profile shell destinations with a central Scan
-  action
+  action; the Home Welcome card includes a transparent Chami mascot holding a
+  mango beside a responsive, theme-aware “Ready to check a fruit?” speech
+  bubble while keeping the scan explanation and action below
 - Android Photo Picker upload through `image_picker`, selected-image preview,
   cancellation/replacement, and lost-result recovery
 - pinned offline FLOAT32 TFLite upload-image inference using
@@ -276,13 +278,26 @@ flutter run
 flutter build apk --debug --no-pub
 ```
 
-The latest configured T-0133 APK is
-`build/app/outputs/flutter-apk/app-debug.apk` (236,441,663 bytes, built
-2026-08-18 03:46 +08:00; SHA-256
-`D16285560D265548D38FA968C2D59A8C145B659903DEA93D0FB4A8D3141052CC`). It was
-installed and launched on `emulator-5554` without clearing data; the native
-icon-above-name cold start and dark account-entry wordmark were visually
-checked. The APK includes the create-account global eligibility/prompt fix.
+The latest configured APK (T-0134 speech-bubble outline refinement after
+T-0135 Profile work) is
+`build/app/outputs/flutter-apk/app-debug.apk` (236,448,552 bytes, built
+2026-08-19 00:00 +08:00; SHA-256
+`69F6BD18268CA9CAA9B466A6A7B2846989ACAB7A5F70242A614BF97B3E405C89`). Its
+native cold-start lettering is reduced slightly while the prior icon-plus-
+branding layout is retained. It also includes the Guest onboarding
+back-navigation loading-state fix and the create-account global
+eligibility/prompt fix. It was installed over existing data on
+`emulator-5554`.
+It also includes the Home mascot prompt and transparent mascot asset; the
+regular and compact dark-mode Home checks passed, and light/dark Home
+screenshots verified the smaller mascot, larger bubble, visible tail, unified
+tail/body outline, and continuous prompt hover on the emulator. Profile now
+uses the same light/dark
+Appearance card in Guest and signed-in modes, with the requested section
+ordering and a visible light-mode switch. The mascot asset also has the
+isolated arm/body white background component removed; dark Home verification
+shows that gap as transparent. The speech-bubble tail and rounded body are
+painted as one outlined path, eliminating the visible junction seam.
 The single-device link/persist/isolate/pending-release/unlink/re-link flow has
 also passed on a physical Android device; two-device convergence and
 cloud/Guest conflict acceptance remain open.

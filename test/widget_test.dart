@@ -172,6 +172,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('back from guest onboarding clears account-entry loading', (
+    WidgetTester tester,
+  ) async {
+    await _pumpKami(
+      tester,
+      destination: StartupDestination.accountEntry,
+      preferences: FakeStartupPreferences(),
+    );
+
+    await tester.tap(find.text('Continue as guest'));
+    await tester.pumpAndSettle();
+    expect(find.text('Scan or upload a fruit'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to account options'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue as guest'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('interrupted guest startup resumes onboarding', (
     WidgetTester tester,
   ) async {
@@ -498,6 +518,46 @@ void main() {
     expect(find.text('Choose a scan method'), findsOneWidget);
     expect(find.text('Upload image'), findsOneWidget);
     expect(find.text('Live Scan'), findsOneWidget);
+  });
+
+  testWidgets('Home welcome card shows the Chami mascot prompt', (
+    WidgetTester tester,
+  ) async {
+    await _pumpReturningGuest(tester, imagePicker: FakeScanImagePicker());
+
+    expect(find.byKey(const Key('home-chami-mascot')), findsOneWidget);
+    expect(find.bySemanticsLabel('Chami holding a mango'), findsOneWidget);
+    expect(find.byKey(const Key('home-chami-prompt')), findsOneWidget);
+    expect(find.text('Ready to check a fruit?'), findsOneWidget);
+    expect(find.text('Start scan'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home mascot prompt remains usable in dark compact layout', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(() async {
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    await _pumpKami(
+      tester,
+      destination: StartupDestination.returningGuest,
+      preferences: FakeStartupPreferences(
+        guestSelected: true,
+        onboardingCompleted: true,
+        appearanceMode: AppearanceMode.dark,
+      ),
+    );
+
+    expect(find.byKey(const Key('home-chami-mascot')), findsOneWidget);
+    expect(find.byKey(const Key('home-chami-prompt')), findsOneWidget);
+    expect(find.text('Ready to check a fruit?'), findsOneWidget);
+    expect(find.text('Start scan'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('History loads older scans in explicit pages', (

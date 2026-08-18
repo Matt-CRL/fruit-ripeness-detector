@@ -72,6 +72,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/branding/chami_mascot_mango.png
     - assets/branding/chami_wordmark_light.png
     - assets/branding/chami_wordmark_dark.png
     - assets/models/mobilenetv4_fruit_float32.manifest.json

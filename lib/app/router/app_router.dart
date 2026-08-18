@@ -45,7 +45,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.onboarding,
-        builder: (context, state) => const OnboardingScreen(),
+        builder: (context, state) => OnboardingScreen(
+          openedFromAccountChoice:
+              state.uri.queryParameters['from'] == 'account-choice',
+        ),
       ),
       GoRoute(
         path: AppRoutes.accountChoice,
