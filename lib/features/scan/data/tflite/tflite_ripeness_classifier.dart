@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
@@ -34,12 +35,40 @@ final class TfliteRipenessClassifier
     try {
       final session = await (_session ??= _createSession());
       final inputContract = session.manifest.input;
-      final input = await Isolate.run(
-        () => preprocessImageFile(imagePath, inputContract),
+      final imageBytes = await File(imagePath).readAsBytes();
+
+      List<double>? u2netAlphaMask;
+      if (session.hasU2net) {
+        try {
+          final u2Input = await Isolate.run(
+            () => prepareU2netInput(imageBytes),
+            debugName: 'KamiU2netInputPrep',
+          );
+          u2netAlphaMask = await session.runU2net(u2Input);
+        } on Object catch (error) {
+          if (kDebugMode) {
+            debugPrint('U2-Net background matting skipped: $error');
+          }
+        }
+      }
+
+      final preprocessed = await Isolate.run(
+        () => preprocessImageBytes(
+          imageBytes,
+          inputContract,
+          u2netAlphaMask: u2netAlphaMask,
+        ),
         debugName: 'KamiImagePreprocessing',
       );
-      final logits = await session.run(input);
-      return _outputDecoder.decode(logits: logits, manifest: session.manifest);
+
+      final output = await session.run(preprocessed.tensorValues);
+      return _outputDecoder.decode(
+        logits: output.probabilities,
+        heatmap: output.heatmap,
+        manifest: session.manifest,
+        isolatedImageBytes: preprocessed.isolatedImageBytes,
+        gradCamImageBytes: preprocessed.gradCamImageBytes,
+      );
     } on RipenessClassificationException {
       rethrow;
     } on ImagePreprocessingException catch (error) {
@@ -70,14 +99,23 @@ final class TfliteRipenessClassifier
     }
 
     try {
+      if (frame.targetCrop == null || !frame.targetCrop!.isValid) {
+        throw const RipenessClassificationException(
+          'The live target frame is not ready. Center the fruit inside the target box and try again.',
+        );
+      }
       final session = await (_session ??= _createSession());
       final inputContract = session.manifest.input;
       final input = await Isolate.run(
         () => preprocessCameraFrame(frame, inputContract),
         debugName: 'KamiCameraFramePreprocessing',
       );
-      final logits = await session.run(input);
-      return _outputDecoder.decode(logits: logits, manifest: session.manifest);
+      final output = await session.run(input);
+      return _outputDecoder.decode(
+        logits: output.probabilities,
+        heatmap: output.heatmap,
+        manifest: session.manifest,
+      );
     } on RipenessClassificationException {
       rethrow;
     } on ImagePreprocessingException catch (error) {
@@ -120,19 +158,55 @@ final class TfliteRipenessClassifier
     }
 
     final interpreter = Interpreter.fromBuffer(modelBytes);
+    Interpreter? u2netInterpreter;
+    IsolateInterpreter? isolateInterpreter;
+    IsolateInterpreter? u2netIsolateInterpreter;
+
     try {
       _validateInterpreter(interpreter, manifest);
-      final isolateInterpreter = await IsolateInterpreter.create(
+      isolateInterpreter = await IsolateInterpreter.create(
         address: interpreter.address,
         debugName: 'KamiTfliteInference',
       );
+
+      final aux = manifest.auxiliaryModel;
+      if (aux != null) {
+        try {
+          final u2Data = await _assetBundle.load(aux.assetPath);
+          final u2Bytes = u2Data.buffer.asUint8List(
+            u2Data.offsetInBytes,
+            u2Data.lengthInBytes,
+          );
+          final u2Sha256 = await Isolate.run(
+            () => sha256.convert(u2Bytes).toString(),
+            debugName: 'KamiU2netChecksum',
+          );
+          if (u2Sha256 == aux.sha256) {
+            u2netInterpreter = Interpreter.fromBuffer(u2Bytes);
+            u2netIsolateInterpreter = await IsolateInterpreter.create(
+              address: u2netInterpreter.address,
+              debugName: 'KamiU2netInference',
+            );
+          }
+        } on Object catch (e) {
+          if (kDebugMode) {
+            debugPrint('Could not initialize U2-Net auxiliary model: $e');
+          }
+        }
+      }
+
       return _TfliteModelSession(
         manifest: manifest,
         interpreter: interpreter,
         isolateInterpreter: isolateInterpreter,
+        u2netInterpreter: u2netInterpreter,
+        u2netIsolateInterpreter: u2netIsolateInterpreter,
       );
     } on Object {
+      isolateInterpreter?.close();
       interpreter.close();
+      u2netIsolateInterpreter?.close();
+      u2netInterpreter?.close();
       rethrow;
     }
   }
@@ -160,14 +234,15 @@ void _validateInterpreter(
 ) {
   final inputs = interpreter.getInputTensors();
   final outputs = interpreter.getOutputTensors();
-  if (inputs.length != 1 || outputs.length != 1) {
+  final heatmapContract = manifest.heatmapOutput;
+  final expectedOutputCount = heatmapContract == null ? 1 : 2;
+  if (inputs.length != 1 || outputs.length != expectedOutputCount) {
     throw const ModelContractException(
-      'The bundled model must have exactly one input and one output.',
+      'The bundled model tensor count does not match its manifest.',
     );
   }
 
   final input = inputs.single;
-  final output = outputs.single;
   if (input.name != manifest.input.name ||
       !_sameShape(input.shape, manifest.input.shape) ||
       input.type != TensorType.float32) {
@@ -175,12 +250,33 @@ void _validateInterpreter(
       'The bundled model input tensor does not match its manifest.',
     );
   }
+  if (manifest.output.index >= outputs.length) {
+    throw const ModelContractException(
+      'The classification output index is outside the interpreter outputs.',
+    );
+  }
+  final output = outputs[manifest.output.index];
   if (output.name != manifest.output.name ||
       !_sameShape(output.shape, manifest.output.shape) ||
       output.type != TensorType.float32) {
     throw const ModelContractException(
       'The bundled model output tensor does not match its manifest.',
     );
+  }
+  if (heatmapContract != null) {
+    if (heatmapContract.index >= outputs.length) {
+      throw const ModelContractException(
+        'The heatmap output index is outside the interpreter outputs.',
+      );
+    }
+    final heatmap = outputs[heatmapContract.index];
+    if (heatmap.name != heatmapContract.name ||
+        !_sameShape(heatmap.shape, heatmapContract.shape) ||
+        heatmap.type != TensorType.float32) {
+      throw const ModelContractException(
+        'The bundled model heatmap tensor does not match its manifest.',
+      );
+    }
   }
 }
 
@@ -201,22 +297,92 @@ final class _TfliteModelSession {
     required this.manifest,
     required this._interpreter,
     required this._isolateInterpreter,
+    this.u2netInterpreter,
+    this.u2netIsolateInterpreter,
   });
 
   final ModelBundleManifest manifest;
   final Interpreter _interpreter;
   final IsolateInterpreter _isolateInterpreter;
+  final Interpreter? u2netInterpreter;
+  final IsolateInterpreter? u2netIsolateInterpreter;
 
-  Future<List<double>> run(Float32List input) async {
-    final output = <List<double>>[
+  bool get hasU2net => u2netIsolateInterpreter != null;
+
+  Future<List<double>> runU2net(Float32List input) async {
+    final outputMask = List.generate(
+      1,
+      (_) => List.generate(
+        1,
+        (_) => List.generate(
+          320,
+          (_) => List<double>.filled(320, 0),
+        ),
+      ),
+    );
+    await u2netIsolateInterpreter!.runForMultipleInputs(
+      [input.buffer],
+      {0: outputMask},
+    );
+    return outputMask[0][0].expand((row) => row).toList(growable: false);
+  }
+
+  Future<_TfliteModelOutput> run(Float32List input) async {
+    final probabilities = <List<double>>[
       List<double>.filled(manifest.output.orderedLabels.length, 0),
     ];
-    await _isolateInterpreter.run(input.buffer, output);
-    return List<double>.unmodifiable(output.single);
+    final outputs = <int, Object>{manifest.output.index: probabilities};
+    List<List<List<List<double>>>>? rawHeatmap;
+    final heatmapContract = manifest.heatmapOutput;
+    if (heatmapContract != null) {
+      rawHeatmap = List.generate(
+        1,
+        (_) => List.generate(
+          1,
+          (_) => List.generate(
+            heatmapContract.height,
+            (_) => List<double>.filled(heatmapContract.width, 0),
+          ),
+        ),
+      );
+      outputs[heatmapContract.index] = rawHeatmap;
+    }
+    await _isolateInterpreter.runForMultipleInputs([input.buffer], outputs);
+    final heatmapValues = rawHeatmap
+        ?.expand(
+          (channel) => channel.expand((row) => row.expand((values) => values)),
+        )
+        .toList();
+    if (heatmapValues != null &&
+        heatmapValues.any((value) => !value.isFinite)) {
+      throw const ModelContractException(
+        'The model produced a non-finite heatmap value.',
+      );
+    }
+    final heatmap = heatmapValues == null
+        ? null
+        : ActivationHeatmap(
+            width: heatmapContract!.width,
+            height: heatmapContract.height,
+            values: List.unmodifiable(heatmapValues),
+          );
+    return _TfliteModelOutput(
+      probabilities: List<double>.unmodifiable(probabilities.single),
+      heatmap: heatmap,
+    );
   }
 
   Future<void> close() async {
     await _isolateInterpreter.close();
     _interpreter.close();
+    await u2netIsolateInterpreter?.close();
+    u2netInterpreter?.close();
   }
+}
+
+final class _TfliteModelOutput {
+  const _TfliteModelOutput({required this.probabilities, this.heatmap});
+
+  final List<double> probabilities;
+  final ActivationHeatmap? heatmap;
 }

@@ -55,6 +55,38 @@ void main() {
     expect(find.text('Analyzing the camera view…'), findsOneWidget);
   });
 
+  testWidgets('rejected live result hides candidate and blocks saving', (
+    tester,
+  ) async {
+    final session = _WidgetTestCameraSession();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          liveCameraGatewayProvider.overrideWithValue(
+            _WidgetTestCameraGateway(session),
+          ),
+          liveScanClassifierProvider.overrideWithValue(
+            _RejectedWidgetTestClassifier(),
+          ),
+        ],
+        child: const MaterialApp(home: LiveScanScreen()),
+      ),
+    );
+    await tester.pump();
+
+    session.emit(_widgetFrame);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('No final result yet'), findsOneWidget);
+    expect(
+      find.textContaining('Fruit not recognized or unclear'),
+      findsOneWidget,
+    );
+    expect(find.text('Save Result'), findsNothing);
+    expect(find.text('Pause result'), findsOneWidget);
+  });
+
   testWidgets('explains denied camera permission and offers retry', (
     tester,
   ) async {
@@ -162,7 +194,9 @@ void main() {
       expect(find.text('Result saved'), findsNothing);
       expect(find.text('Would you like to add it to a batch?'), findsNothing);
 
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Add to Batch'));
+      final addToBatch = find.widgetWithText(OutlinedButton, 'Add to Batch');
+      await tester.ensureVisible(addToBatch);
+      await tester.tap(addToBatch);
       await tester.pumpAndSettle();
 
       expect(
@@ -302,6 +336,21 @@ final class _WidgetTestClassifier implements LiveRipenessClassifier {
       modelVersion: 'test-model',
       origin: ResultOrigin.onDeviceModel,
       requiresRetake: false,
+    );
+  }
+}
+
+final class _RejectedWidgetTestClassifier implements LiveRipenessClassifier {
+  @override
+  Future<ClassificationResult> classifyFrame(LiveCameraFrame frame) async {
+    return const ClassificationResult(
+      fruit: FruitIdentifier.carabaoMango,
+      ripeness: RipenessStage.ripe,
+      modelConfidence: 0.42,
+      modelVersion: 'test-model',
+      origin: ResultOrigin.onDeviceModel,
+      requiresRetake: true,
+      recognitionStatus: RecognitionStatus.notRecognizedOrUnclear,
     );
   }
 }

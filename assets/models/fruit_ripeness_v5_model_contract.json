@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "contract_version": "2.0.0",
+  "model_metadata": {
+    "model_name": "MobileNetV4 Fruit Ripeness & Shelf-Life Classifier (Philippine Fruits)",
+    "iteration": "v5",
+    "backbone": "mobilenetv4_conv_small.e2400_r224_in1k",
+    "num_classes": 9,
+    "classes": [
+      "overripe-banana",
+      "overripe-mango",
+      "overripe-papaya",
+      "ripe-banana",
+      "ripe-mango",
+      "ripe-papaya",
+      "unripe-banana",
+      "unripe-mango",
+      "unripe-papaya"
+    ],
+    "target_fruits": ["Lakatan Banana", "Carabao Mango", "Red Papaya"],
+    "training_framework": "PyTorch 2.x / timm / LiteRT",
+    "target_runtime": "TensorFlow Lite (Flutter / Android / iOS / Web)"
+  },
+  "pipeline_stages": [
+    {
+      "step": 1,
+      "name": "Neural Foreground Matting (U2-Net)",
+      "model_file": "u2net.tflite",
+      "input_shape": [1, 3, 320, 320],
+      "output_shape": [1, 1, 320, 320],
+      "description": "Erases background tables, paper plates, napkins, and background clutter to generate a continuous alpha matte [0.0, 1.0]."
+    },
+    {
+      "step": 2,
+      "name": "Tight Bounding-Box Crop & Black Canvas Letterbox",
+      "description": "Extracts the fruit bounding box from the alpha mask and centers it onto a square solid black canvas (0, 0, 0) of size max(w, h) before resizing to 224x224. This preserves the natural aspect ratio of the fruit without stretching."
+    },
+    {
+      "step": 3,
+      "name": "MobileNetV4 Classification",
+      "model_file": "mobilenetv4_fruit_float32.tflite",
+      "input_shape": [1, 3, 224, 224],
+      "output_shape": [1, 9],
+      "dtype": "float32",
+      "normalization": {
+        "formula": "((pixel / 255.0) - mean) / std",
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225]
+      },
+      "activation": "softmax"
+    },
+    {
+      "step": 4,
+      "name": "Grad-CAM Heatmap Visualization",
+      "colormap": "OpenCV JET",
+      "blend_formula": "0.6 * Base_RGB + 0.4 * JET_Heatmap",
+      "description": "Highlights ripeness hotspots and blemishes with glowing red/yellow over deep navy blue."
+    },
+    {
+      "step": 5,
+      "name": "Postharvest Shelf-Life & Storage Advisory",
+      "evidence_source": "Postharvest Horticulture Training and Research Center (PHTRC) & PhilMech Literature Rules"
+    }
+  ],
+  "postharvest_shelf_life_rules": {
+    "unripe-banana": {
+      "stage": "Unripe",
+      "fruit": "Lakatan Banana",
+      "shelf_life": "8–13 days",
+      "guidance": "Keep at room temperature (20–25°C) with good airflow, away from direct sunlight and ethylene sources. Do not refrigerate."
+    },
+    "ripe-banana": {
+      "stage": "Ripe",
+      "fruit": "Lakatan Banana",
+      "shelf_life": "3–4 days",
+      "guidance": "Keep in a cool, dry, ventilated place and consume soon. Refrigeration darkens the peel but keeps pulp firm for 2 additional days."
+    },
+    "overripe-banana": {
+      "stage": "Overripe",
+      "fruit": "Lakatan Banana",
+      "shelf_life": "Consume immediately",
+      "guidance": "Consume immediately for eating or peel and freeze for smoothies and baking if pulp is sound. Discard if fermented or moldy."
+    },
+    "unripe-mango": {
+      "stage": "Unripe",
+      "fruit": "Carabao Mango",
+      "shelf_life": "5–7 days",
+      "guidance": "Keep whole at room temperature in a dry, ventilated, shaded area. Do not refrigerate until partially ripe."
+    },
+    "ripe-mango": {
+      "stage": "Ripe",
+      "fruit": "Carabao Mango",
+      "shelf_life": "1–3 days",
+      "guidance": "Keep in the coolest shaded area available and consume soon. Brief refrigeration extends eating quality."
+    },
+    "overripe-mango": {
+      "stage": "Overripe",
+      "fruit": "Carabao Mango",
+      "shelf_life": "Consume immediately",
+      "guidance": "Consume immediately if still sound; otherwise discard."
+    },
+    "unripe-papaya": {
+      "stage": "Unripe",
+      "fruit": "Red Papaya",
+      "shelf_life": "3–6 days",
+      "guidance": "Keep at room temperature in a dry, shaded area until ripe. Avoid rough handling and inspect daily."
+    },
+    "ripe-papaya": {
+      "stage": "Ripe",
+      "fruit": "Red Papaya",
+      "shelf_life": "1–2 days",
+      "guidance": "Consume promptly. Brief refrigeration after ripening extends edible quality."
+    },
+    "overripe-papaya": {
+      "stage": "Overripe",
+      "fruit": "Red Papaya",
+      "shelf_life": "Consume immediately",
+      "guidance": "Consume immediately only if still sound; otherwise discard."
+    }
+  }
+}

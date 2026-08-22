@@ -1,0 +1,9 @@
+overripe-banana
+overripe-mango
+overripe-papaya
+ripe-banana
+ripe-mango
+ripe-papaya
+unripe-banana
+unripe-mango
+unripe-papaya

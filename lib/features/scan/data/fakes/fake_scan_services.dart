@@ -7,17 +7,84 @@ final class FakeRipenessClassifier implements RipenessClassifier {
   @override
   Future<ClassificationResult> classify(String imagePath) async {
     final requiresRetake = imagePath == 'fake://retake';
+    final unrecognized = imagePath == 'fake://unrecognized';
 
     return ClassificationResult(
       fruit: FruitIdentifier.carabaoMango,
       ripeness: RipenessStage.ripe,
-      modelConfidence: requiresRetake ? 0.31 : 0.87,
+      modelConfidence: requiresRetake
+          ? 0.31
+          : unrecognized
+          ? 0.42
+          : 0.87,
       modelVersion: 'fake-foundation-v1',
       origin: ResultOrigin.demo,
-      requiresRetake: requiresRetake,
+      requiresRetake: requiresRetake || unrecognized,
       retakeReason: requiresRetake
           ? 'The demo classifier reported low confidence; no threshold was '
                 'evaluated.'
+          : unrecognized
+          ? 'Fruit not recognized or unclear.'
+          : null,
+      recognitionStatus: unrecognized
+          ? RecognitionStatus.notRecognizedOrUnclear
+          : RecognitionStatus.recognized,
+      heatmap: unrecognized
+          ? const ActivationHeatmap(
+              width: 7,
+              height: 7,
+              values: [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1,
+                1,
+                0,
+                0,
+                1,
+                2,
+                2,
+                2,
+                1,
+                0,
+                0,
+                1,
+                2,
+                3,
+                2,
+                1,
+                0,
+                0,
+                1,
+                2,
+                2,
+                2,
+                1,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+              ],
+            )
           : null,
     );
   }

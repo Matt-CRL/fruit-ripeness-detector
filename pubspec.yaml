@@ -75,8 +75,12 @@ flutter:
     - assets/branding/chami_mascot_mango.png
     - assets/branding/chami_wordmark_light.png
     - assets/branding/chami_wordmark_dark.png
-    - assets/models/mobilenetv4_fruit_float32.manifest.json
     - assets/models/mobilenetv4_fruit_float32.tflite
+    - assets/models/u2net.tflite
+    - assets/models/fruit_ripeness_v5.manifest.json
+    - assets/models/fruit_ripeness_v5_labels.txt
+    - assets/models/fixtures/fruit_ripeness_v5_midgray.jpg
+    - assets/models/fixtures/fruit_ripeness_v5_expected_output.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

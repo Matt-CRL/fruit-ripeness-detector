@@ -51,6 +51,11 @@ const _lowConfidenceFixture = SelectedScanImage(
   name: 'unclear-fruit.png',
 );
 
+const _unrecognizedFixture = SelectedScanImage(
+  path: 'fake://unrecognized',
+  name: 'unrecognized-fruit.png',
+);
+
 final Uint8List _validPngBytes = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
   '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -1152,6 +1157,29 @@ void main() {
       expect(picker.pickCalls, 2);
     },
   );
+
+  testWidgets('unrecognized result hides the candidate and shows its heatmap', (
+    WidgetTester tester,
+  ) async {
+    final picker = FakeScanImagePicker()..nextSelection = _unrecognizedFixture;
+    await _pumpReturningGuest(tester, imagePicker: picker);
+    await _openUnrecognizedResult(tester);
+
+    expect(find.text('Fruit not recognized or unclear'), findsNWidgets(2));
+    expect(find.text('Carabao mango'), findsNothing);
+    expect(find.text('Ripe'), findsNothing);
+    expect(find.text('42%'), findsNothing);
+    expect(find.text('What Chami focused on'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Heatmap explanation. Colored regions show what influenced the model, '
+        'not fruit boundaries or proof of correctness.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Upload a new photo'), findsOneWidget);
+    expect(find.text('Save Result'), findsNothing);
+  });
 
   testWidgets('upload preview hides the low-confidence developer sample', (
     WidgetTester tester,
@@ -2825,6 +2853,16 @@ Future<void> _openLowConfidenceResult(WidgetTester tester) async {
     find.text('Low confidence - this result may not be accurate'),
     findsOneWidget,
   );
+}
+
+Future<void> _openUnrecognizedResult(WidgetTester tester) async {
+  await _openUploadFlow(tester);
+  await tester.tap(find.text('Choose from gallery'));
+  await _pumpImagePreview(tester);
+  await tester.scrollUntilVisible(find.text('Use photo'), 300);
+  await tester.tap(find.text('Use photo'));
+  await _pumpRoute(tester);
+  expect(find.text('Fruit not recognized or unclear'), findsNWidgets(2));
 }
 
 Future<void> _openUploadFlow(WidgetTester tester) async {

@@ -9,6 +9,28 @@ import 'package:kami/features/scan/domain/ripeness_classifier.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
 void main() {
+  test('waits for target-box geometry before admitting live frames', () async {
+    final session = _FakeLiveCameraSession();
+    final classifier = _CompletingLiveClassifier();
+    final controller = LiveScanController(
+      cameraGateway: _FakeLiveCameraGateway([session]),
+      classifier: classifier,
+      inferenceInterval: Duration.zero,
+    );
+    addTearDown(controller.close);
+
+    await controller.initialize();
+    session.emit(_frame);
+    await _flushAsyncWork();
+    expect(classifier.callCount, 0);
+
+    controller.updateTargetCrop(_fullFrameCrop);
+    session.emit(_frame);
+    await _flushAsyncWork();
+    expect(classifier.callCount, 1);
+    classifier.completeNext(_result);
+  });
+
   test('drops frames while one live inference is in flight', () async {
     final session = _FakeLiveCameraSession();
     final classifier = _CompletingLiveClassifier();
@@ -20,6 +42,7 @@ void main() {
     addTearDown(controller.close);
 
     await controller.initialize();
+    controller.updateTargetCrop(_fullFrameCrop);
     session.emit(_frame);
     session.emit(_frame);
     session.emit(_frame);
@@ -47,6 +70,7 @@ void main() {
       addTearDown(controller.close);
 
       await controller.initialize();
+      controller.updateTargetCrop(_fullFrameCrop);
       session.emit(_frame);
       await _flushAsyncWork();
       expect(controller.result, isNotNull);
@@ -78,6 +102,7 @@ void main() {
       final firstFrame = _frameWithLuminance(64);
       final secondFrame = _frameWithLuminance(192);
       await controller.initialize();
+      controller.updateTargetCrop(_fullFrameCrop);
 
       session.emit(firstFrame);
       classifier.completeNext(_result);
@@ -189,6 +214,8 @@ final _frame = LiveCameraFrame(
     ),
   ],
 );
+
+const _fullFrameCrop = NormalizedCropRect(left: 0, top: 0, width: 1, height: 1);
 
 LiveCameraFrame _frameWithLuminance(int luminance) {
   return LiveCameraFrame(

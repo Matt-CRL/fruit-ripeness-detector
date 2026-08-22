@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 2,
+  "model": {
+    "assetPath": "assets/models/mobilenetv4_fruit_float32.tflite",
+    "sha256": "a767f4985df034612ed19e1dd601980a1cbc6af8a35350e4f422caf5b90ea572",
+    "version": "mobilenetv4-fruit-enhanced-v5",
+    "sourceRepository": "https://github.com/javieAlfaro/fruit_enhancedmodel_mobilenetv5",
+    "sourceCommit": "81e2fe6868d1b700d728a0bc143b61df8a24a3c3",
+    "sourceArchitecture": "mobilenetv4_conv_small.e2400_r224_in1k"
+  },
+  "auxiliaryModel": {
+    "assetPath": "assets/models/u2net.tflite",
+    "sha256": "447287302dce2b969ca7dbf7e73e36c5e494c23d93a79f095710181b8ac271c0",
+    "version": "u2net-foreground-matting-320",
+    "inputShape": [1, 3, 320, 320],
+    "outputShape": [1, 1, 320, 320]
+  },
+  "input": {
+    "name": "serving_default_args_0",
+    "shape": [1, 3, 224, 224],
+    "dataType": "float32",
+    "colorSpace": "rgb",
+    "squareTransform": "letterbox_black",
+    "resizeInterpolation": "bilinear",
+    "pixelScale": 255.0,
+    "mean": [0.485, 0.456, 0.406],
+    "standardDeviation": [0.229, 0.224, 0.225]
+  },
+  "classificationOutput": {
+    "index": 0,
+    "name": "serving_default_output_0_output",
+    "shape": [1, 9],
+    "dataType": "float32",
+    "interpretation": "logits",
+    "activation": "softmax",
+    "orderedLabels": [
+      "overripe-banana",
+      "overripe-mango",
+      "overripe-papaya",
+      "ripe-banana",
+      "ripe-mango",
+      "ripe-papaya",
+      "unripe-banana",
+      "unripe-mango",
+      "unripe-papaya"
+    ]
+  },
+  "confidencePolicy": {
+    "automaticRetakeEnabled": false,
+    "threshold": null,
+    "reason": "Enhanced MobileNetV4 v5 with U2-Net matting"
+  }
+}

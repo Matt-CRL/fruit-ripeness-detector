@@ -1,0 +1,17 @@
+{
+  "fixture_description": "Standard synthetic grey tensor fixture for verification across mobile runtime.",
+  "input_resolution": "224x224x3",
+  "normalization_applied": "ImageNet Mean/Std Standardization",
+  "expected_scores": {
+    "overripe-banana": 4.8e-05,
+    "overripe-mango": 0.000121,
+    "overripe-papaya": 0.0,
+    "ripe-banana": 0.0,
+    "ripe-mango": 3e-06,
+    "ripe-papaya": 0.004791,
+    "unripe-banana": 0.993976,
+    "unripe-mango": 0.001022,
+    "unripe-papaya": 4e-05
+  },
+  "predicted_winner": "unripe-banana"
+}

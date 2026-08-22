@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 enum FruitIdentifier {
   carabaoMango('Carabao mango'),
   lakatanBanana('Lakatan banana'),
@@ -20,6 +22,22 @@ enum RipenessStage {
 
 enum ResultOrigin { demo, onDeviceModel }
 
+enum RecognitionStatus { recognized, notRecognizedOrUnclear }
+
+final class ActivationHeatmap {
+  const ActivationHeatmap({
+    required this.width,
+    required this.height,
+    required this.values,
+  });
+
+  final int width;
+  final int height;
+  final List<double> values;
+
+  double valueAt(int x, int y) => values[y * width + x];
+}
+
 final class SelectedScanImage {
   const SelectedScanImage({required this.path, required this.name})
     : assert(path != ''),
@@ -38,6 +56,10 @@ final class ClassificationResult {
     required this.origin,
     required this.requiresRetake,
     this.retakeReason,
+    this.recognitionStatus = RecognitionStatus.recognized,
+    this.heatmap,
+    this.isolatedImageBytes,
+    this.gradCamImageBytes,
   }) : assert(modelConfidence >= 0 && modelConfidence <= 1);
 
   final FruitIdentifier fruit;
@@ -47,6 +69,10 @@ final class ClassificationResult {
   final ResultOrigin origin;
   final bool requiresRetake;
   final String? retakeReason;
+  final RecognitionStatus recognitionStatus;
+  final ActivationHeatmap? heatmap;
+  final Uint8List? isolatedImageBytes;
+  final Uint8List? gradCamImageBytes;
 }
 
 sealed class ShelfLifeEstimate {

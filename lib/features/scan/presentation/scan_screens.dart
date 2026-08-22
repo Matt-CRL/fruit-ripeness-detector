@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
@@ -705,6 +709,9 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                   _ResultImageCard(
                     imageName: value.image.name,
                     imageProvider: imageProvider,
+                    isolatedImageBytes: classification.isolatedImageBytes,
+                    gradCamImageBytes: classification.gradCamImageBytes,
+                    heatmap: classification.heatmap,
                   ),
                   const SizedBox(height: 16),
                   if (classification.origin == ResultOrigin.demo) ...[
@@ -835,18 +842,58 @@ class _SaveResultOptionsSheet extends StatelessWidget {
   }
 }
 
-class _ResultImageCard extends StatelessWidget {
+enum _ResultViewMode { isolated, original, gradCam }
+
+class _ResultImageCard extends StatefulWidget {
   const _ResultImageCard({
     required this.imageName,
     required this.imageProvider,
+    this.isolatedImageBytes,
+    this.gradCamImageBytes,
+    this.heatmap,
   });
 
   final String imageName;
   final ImageProvider<Object> imageProvider;
+  final Uint8List? isolatedImageBytes;
+  final Uint8List? gradCamImageBytes;
+  final ActivationHeatmap? heatmap;
+
+  @override
+  State<_ResultImageCard> createState() => _ResultImageCardState();
+}
+
+class _ResultImageCardState extends State<_ResultImageCard> {
+  late _ResultViewMode _viewMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewMode = widget.isolatedImageBytes != null
+        ? _ResultViewMode.isolated
+        : _ResultViewMode.original;
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    final ImageProvider<Object> activeProvider;
+    switch (_viewMode) {
+      case _ResultViewMode.isolated:
+        activeProvider = widget.isolatedImageBytes != null
+            ? MemoryImage(widget.isolatedImageBytes!)
+            : widget.imageProvider;
+      case _ResultViewMode.original:
+        activeProvider = widget.imageProvider;
+      case _ResultViewMode.gradCam:
+        activeProvider = widget.gradCamImageBytes != null
+            ? MemoryImage(widget.gradCamImageBytes!)
+            : widget.imageProvider;
+    }
+
+    final hasMultiView = widget.isolatedImageBytes != null ||
+        widget.gradCamImageBytes != null;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -856,32 +903,75 @@ class _ResultImageCard extends StatelessWidget {
         children: [
           Semantics(
             image: true,
-            label: 'Selected image used for this assessment',
+            label: 'Assessment result image preview',
             child: AspectRatio(
               aspectRatio: 4 / 3,
               child: ColoredBox(
                 color: colorScheme.surfaceContainerHighest,
-                child: Image(
-                  image: imageProvider,
-                  fit: BoxFit.contain,
-                  frameBuilder:
-                      (context, child, frame, wasSynchronouslyLoaded) {
-                        if (wasSynchronouslyLoaded || frame != null) {
-                          return child;
-                        }
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            semanticsLabel: 'Loading result image',
-                          ),
-                        );
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image(
+                      key: ValueKey(activeProvider),
+                      image: activeProvider,
+                      fit: BoxFit.contain,
+                      frameBuilder:
+                          (context, child, frame, wasSynchronouslyLoaded) {
+                            if (wasSynchronouslyLoaded || frame != null) {
+                              return child;
+                            }
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                semanticsLabel: 'Loading result image',
+                              ),
+                            );
+                          },
+                      errorBuilder: (context, error, stackTrace) {
+                        return const _UnreadableImage();
                       },
-                  errorBuilder: (context, error, stackTrace) {
-                    return const _UnreadableImage();
-                  },
+                    ),
+                    if (widget.heatmap != null &&
+                        _viewMode == _ResultViewMode.original)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _ActivationHeatmapPainter(widget.heatmap!),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
+          if (hasMultiView) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: SegmentedButton<_ResultViewMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: _ResultViewMode.isolated,
+                    label: Text('Isolated'),
+                    icon: Icon(Icons.crop_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: _ResultViewMode.original,
+                    label: Text('Original'),
+                    icon: Icon(Icons.photo_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: _ResultViewMode.gradCam,
+                    label: Text('Grad-CAM'),
+                    icon: Icon(Icons.visibility_outlined, size: 16),
+                  ),
+                ],
+                selected: {_viewMode},
+                onSelectionChanged: (selected) {
+                  setState(() => _viewMode = selected.first);
+                },
+              ),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -894,7 +984,7 @@ class _ResultImageCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    imageName,
+                    widget.imageName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
@@ -1167,9 +1257,18 @@ class LowConfidenceResultScreen extends ConsumerWidget {
       value.image.path,
     );
     final canReturnToPreviousResult = value.entryMode == ScanEntryMode.rescan;
+    final rejected =
+        value.classification.recognitionStatus ==
+        RecognitionStatus.notRecognizedOrUnclear;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Low-confidence result')),
+      appBar: AppBar(
+        title: Text(
+          rejected
+              ? 'Fruit not recognized or unclear'
+              : 'Low-confidence result',
+        ),
+      ),
       body: ListView(
         padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
         children: [
@@ -1182,18 +1281,28 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                   _ResultImageCard(
                     imageName: value.image.name,
                     imageProvider: imageProvider,
+                    isolatedImageBytes: value.classification.isolatedImageBytes,
+                    gradCamImageBytes: value.classification.gradCamImageBytes,
+                    heatmap: rejected ? value.classification.heatmap : null,
                   ),
                   const SizedBox(height: 12),
-                  _LowConfidenceWarning(origin: value.classification.origin),
-                  const SizedBox(height: 16),
-                  _ResultSummaryCard(
-                    classification: value.classification,
-                    eyebrow: value.classification.origin == ResultOrigin.demo
-                        ? 'Tentative demo result'
-                        : 'Tentative on-device result',
+                  _LowConfidenceWarning(
+                    origin: value.classification.origin,
+                    rejected: rejected,
                   ),
                   const SizedBox(height: 16),
-                  const _WithheldShelfLifeNotice(),
+                  if (rejected) ...[
+                    const _HeatmapExplanation(),
+                  ] else ...[
+                    _ResultSummaryCard(
+                      classification: value.classification,
+                      eyebrow: value.classification.origin == ResultOrigin.demo
+                          ? 'Tentative demo result'
+                          : 'Tentative on-device result',
+                    ),
+                    const SizedBox(height: 16),
+                    const _WithheldShelfLifeNotice(),
+                  ],
                   const SizedBox(height: 16),
                   const _ClearerPhotoTips(),
                   const SizedBox(height: 24),
@@ -1229,9 +1338,10 @@ class LowConfidenceResultScreen extends ConsumerWidget {
 }
 
 class _LowConfidenceWarning extends StatelessWidget {
-  const _LowConfidenceWarning({required this.origin});
+  const _LowConfidenceWarning({required this.origin, required this.rejected});
 
   final ResultOrigin origin;
+  final bool rejected;
 
   @override
   Widget build(BuildContext context) {
@@ -1254,13 +1364,18 @@ class _LowConfidenceWarning extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Low confidence - this result may not be accurate',
+                    Text(
+                      rejected
+                          ? 'Fruit not recognized or unclear'
+                          : 'Low confidence - this result may not be accurate',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      origin == ResultOrigin.demo
+                      rejected
+                          ? 'Chami could not identify a clear supported fruit '
+                                'in this image. Try a clearer, centered photo.'
+                          : origin == ResultOrigin.demo
                           ? 'Chami is showing the tentative demo prediction so '
                                 'you can decide whether to upload a clearer '
                                 'photo. It is not a confirmed assessment.'
@@ -1277,6 +1392,122 @@ class _LowConfidenceWarning extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HeatmapExplanation extends StatelessWidget {
+  const _HeatmapExplanation();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label:
+          'Heatmap explanation. Colored regions show what influenced the model, '
+          'not fruit boundaries or proof of correctness.',
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: const ListTile(
+          leading: Icon(Icons.visibility_outlined),
+          title: Text('What Chami focused on'),
+          subtitle: Text(
+            'Blue to red regions show what influenced the model. They are not '
+            'fruit boundaries and do not prove the result is correct.',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivationHeatmapPainter extends CustomPainter {
+  const _ActivationHeatmapPainter(this.heatmap);
+
+  // The model exposes a deliberately small 7x7 activation map. Sampling it
+  // on a finer grid with bilinear interpolation keeps the explanation smooth
+  // without changing the model output or pretending it contains pixel-level
+  // fruit boundaries.
+  static const _samplesPerActivationCell = 16;
+
+  final ActivationHeatmap heatmap;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final values = heatmap.values;
+    if (values.isEmpty || heatmap.width <= 0 || heatmap.height <= 0) {
+      return;
+    }
+    final minimum = values.reduce(math.min);
+    final maximum = values.reduce(math.max);
+    final range = maximum - minimum;
+    final renderWidth = heatmap.width * _samplesPerActivationCell;
+    final renderHeight = heatmap.height * _samplesPerActivationCell;
+    final cellWidth = size.width / renderWidth;
+    final cellHeight = size.height / renderHeight;
+    final paint = Paint()..isAntiAlias = false;
+    for (var y = 0; y < renderHeight; y++) {
+      final sourceY = renderHeight == 1 ? 0.0 : y / (renderHeight - 1);
+      for (var x = 0; x < renderWidth; x++) {
+        final sourceX = renderWidth == 1 ? 0.0 : x / (renderWidth - 1);
+        final value = _sampleHeatmap(sourceX, sourceY);
+        final normalized = range <= 0
+            ? 0.5
+            : ((value - minimum) / range).clamp(0.0, 1.0);
+        paint.color = _heatmapColor(normalized).withValues(alpha: 0.5);
+        canvas.drawRect(
+          Rect.fromLTRB(
+            x * cellWidth,
+            y * cellHeight,
+            (x + 1) * cellWidth,
+            (y + 1) * cellHeight,
+          ),
+          paint,
+        );
+      }
+    }
+  }
+
+  double _sampleHeatmap(double x, double y) {
+    final sourceX = x * (heatmap.width - 1);
+    final sourceY = y * (heatmap.height - 1);
+    final x0 = sourceX.floor();
+    final y0 = sourceY.floor();
+    final x1 = math.min(x0 + 1, heatmap.width - 1);
+    final y1 = math.min(y0 + 1, heatmap.height - 1);
+    final xWeight = sourceX - x0;
+    final yWeight = sourceY - y0;
+
+    final top = _lerp(
+      heatmap.valueAt(x0, y0),
+      heatmap.valueAt(x1, y0),
+      xWeight,
+    );
+    final bottom = _lerp(
+      heatmap.valueAt(x0, y1),
+      heatmap.valueAt(x1, y1),
+      xWeight,
+    );
+    return _lerp(top, bottom, yWeight);
+  }
+
+  double _lerp(double start, double end, double amount) =>
+      start + (end - start) * amount;
+
+  @override
+  bool shouldRepaint(covariant _ActivationHeatmapPainter oldDelegate) =>
+      oldDelegate.heatmap != heatmap;
+}
+
+Color _heatmapColor(double value) {
+  const stops = <Color>[
+    Color(0xff1555d1),
+    Color(0xff18a957),
+    Color(0xffffdf00),
+    Color(0xffe53935),
+  ];
+  final scaled = value.clamp(0.0, 1.0) * (stops.length - 1);
+  final lower = scaled.floor();
+  final upper = lower == stops.length - 1 ? lower : lower + 1;
+  return Color.lerp(stops[lower], stops[upper], scaled - lower)!;
 }
 
 class _WithheldShelfLifeNotice extends StatelessWidget {

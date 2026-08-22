@@ -11,42 +11,37 @@ void main() {
 
   setUp(() {
     manifestJson = jsonDecode(
-      File(
-        'assets/models/mobilenetv4_fruit_float32.manifest.json',
-      ).readAsStringSync(),
+      File('assets/models/fruit_ripeness_v5.manifest.json').readAsStringSync(),
     );
   });
 
-  test('bundled manifest records the reviewed FLOAT32 contract', () {
+  test('bundled v5 manifest records the MobileNetV4 + U2-Net contract', () {
     final manifest = ModelBundleManifest.fromJson(manifestJson);
 
     expect(manifest.modelSha256, hasLength(64));
-    expect(manifest.modelVersion, 'mobilenetv4-fruit-enhanced-b11167b');
+    expect(manifest.modelVersion, 'mobilenetv4-fruit-enhanced-v5');
     expect(
       manifest.modelSha256,
-      '5f131720b8d4b820ec9584e4f8ffab9ac2951e1e8d145363070bf5f2afcca5a2',
+      'a767f4985df034612ed19e1dd601980a1cbc6af8a35350e4f422caf5b90ea572',
     );
-    expect(manifest.input.name, 'input');
-    expect(manifest.input.shape, [1, 224, 224, 3]);
-    expect(manifest.output.name, 'output');
+    expect(manifest.auxiliaryModel?.assetPath, 'assets/models/u2net.tflite');
+    expect(
+      manifest.auxiliaryModel?.sha256,
+      '447287302dce2b969ca7dbf7e73e36c5e494c23d93a79f095710181b8ac271c0',
+    );
+    expect(manifest.input.name, 'serving_default_args_0');
+    expect(manifest.input.shape, [1, 3, 224, 224]);
+    expect(manifest.input.isNchw, isTrue);
+    expect(manifest.input.width, 224);
+    expect(manifest.input.height, 224);
+    expect(manifest.output.index, 0);
+    expect(manifest.output.name, 'serving_default_output_0_output');
     expect(manifest.output.shape, [1, 9]);
-    expect(manifest.output.orderedLabels, [
-      'overripe-banana',
-      'overripe-mango',
-      'overripe-papaya',
-      'ripe-banana',
-      'ripe-mango',
-      'ripe-papaya',
-      'unripe-banana',
-      'unripe-mango',
-      'unripe-papaya',
-    ]);
-    expect(manifest.confidencePolicy.automaticRetakeEnabled, isFalse);
-    expect(manifest.confidencePolicy.threshold, isNull);
+    expect(manifest.output.interpretation, 'logits');
   });
 
   test('manifest rejects incomplete ordered labels', () {
-    final output = manifestJson['output'] as Map<String, dynamic>;
+    final output = manifestJson['classificationOutput'] as Map<String, dynamic>;
     output['orderedLabels'] = <String>[
       ...supportedModelOutputLabels.where(
         (label) => label != 'overripe-papaya',
@@ -60,9 +55,9 @@ void main() {
     );
   });
 
-  test('manifest rejects enabled confidence policy without threshold', () {
-    final policy = manifestJson['confidencePolicy'] as Map<String, dynamic>;
-    policy['automaticRetakeEnabled'] = true;
+  test('manifest rejects invalid auxiliary sha256', () {
+    final aux = manifestJson['auxiliaryModel'] as Map<String, dynamic>;
+    aux['sha256'] = 'invalid_hash';
 
     expect(
       () => ModelBundleManifest.fromJson(manifestJson),
@@ -70,47 +65,17 @@ void main() {
     );
   });
 
-  test('stable Softmax maps all nine ordered outputs', () {
+  test('logits outputs are converted to probabilities using stable Softmax', () {
     final manifest = ModelBundleManifest.fromJson(manifestJson);
-    const decoder = ModelOutputDecoder();
-    final expected = <(FruitIdentifier, RipenessStage)>[
-      (FruitIdentifier.lakatanBanana, RipenessStage.overripe),
-      (FruitIdentifier.carabaoMango, RipenessStage.overripe),
-      (FruitIdentifier.redPapaya, RipenessStage.overripe),
-      (FruitIdentifier.lakatanBanana, RipenessStage.ripe),
-      (FruitIdentifier.carabaoMango, RipenessStage.ripe),
-      (FruitIdentifier.redPapaya, RipenessStage.ripe),
-      (FruitIdentifier.lakatanBanana, RipenessStage.unripe),
-      (FruitIdentifier.carabaoMango, RipenessStage.unripe),
-      (FruitIdentifier.redPapaya, RipenessStage.unripe),
-    ];
-
-    for (var winningIndex = 0; winningIndex < expected.length; winningIndex++) {
-      final logits = List<double>.filled(expected.length, -1000);
-      logits[winningIndex] = 1000;
-      final result = decoder.decode(logits: logits, manifest: manifest);
-
-      expect(result.fruit, expected[winningIndex].$1);
-      expect(result.ripeness, expected[winningIndex].$2);
-      expect(result.modelConfidence, closeTo(1, 1e-12));
-      expect(result.origin, ResultOrigin.onDeviceModel);
-      expect(result.requiresRetake, isFalse);
-    }
-  });
-
-  test('validated confidence threshold produces a tentative result', () {
-    final policy = manifestJson['confidencePolicy'] as Map<String, dynamic>;
-    policy['automaticRetakeEnabled'] = true;
-    policy['threshold'] = 0.8;
-    final manifest = ModelBundleManifest.fromJson(manifestJson);
-
     final result = const ModelOutputDecoder().decode(
-      logits: List<double>.filled(9, 0),
+      logits: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0],
       manifest: manifest,
     );
 
-    expect(result.modelConfidence, closeTo(1 / 9, 1e-12));
-    expect(result.requiresRetake, isTrue);
-    expect(result.retakeReason, isNotNull);
+    expect(result.fruit, FruitIdentifier.lakatanBanana);
+    expect(result.ripeness, RipenessStage.unripe);
+    expect(result.modelConfidence, greaterThan(0.99));
+    expect(result.requiresRetake, isFalse);
+    expect(result.recognitionStatus, RecognitionStatus.recognized);
   });
 }

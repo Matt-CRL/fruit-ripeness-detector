@@ -165,32 +165,36 @@ part of this repository.
 
 ## Bundled model
 
-Authorized private-team clones include:
+Authorized private-team clones include the v5 heatmap bundle:
 
-- `assets/models/mobilenetv4_fruit_float32.tflite`
-- `assets/models/mobilenetv4_fruit_float32.manifest.json`
+- `assets/models/fruit_ripeness_v5_heatmap.tflite`
+- `assets/models/fruit_ripeness_v5.manifest.json`
+- `assets/models/fruit_ripeness_v5_labels.txt`
 
-The application validates the model checksum, tensor contract, and label order
-against the manifest before inference. Replace the model and manifest together.
-Do not redistribute the model outside the authorized research team or make the
-repository public until the model owner confirms distribution rights in
-writing.
+The bundle is sourced from the private
+`fruit_enhancedmodel_mobilenetv5` repository at commit `7ea0a20` and is pinned
+to SHA-256
+`D678CCE9A7D3DEE3475ADFDDE14F272F95D21E0ECB6651CD2619EBB25A5912F3`.
+The manifest validates one FLOAT32 `[1,224,224,3]` input, the exact nine-label
+order, a probability output `[1,9]`, and a heatmap output `[1,1,7,7]` before
+inference. The model version is `mobilenetv4-fruit-v5-7ea0a20`. Do not
+redistribute the model outside the authorized research team or make the
+repository public until the model owner confirms distribution rights.
 
-Normal uploaded images are evaluated by model version
-`mobilenetv4-fruit-enhanced-b11167b` entirely on device. A deterministic fake
-is retained for automated tests, while classifier-triggered low-confidence
-routing remains available. Accepted classifications use nine versioned
-provisional literature-informed shelf-life recommendations; results requiring
-a retake withhold guidance. These are approximate provisional estimates, not
-locally validated remaining-life predictions.
+Output 0 is already Softmax probabilities; Chami does not apply a second
+Softmax. A maximum-probability gate at `0.75` reports “Fruit not recognized or
+unclear”. This is transparent decision support, not certified OOD detection.
+Rejected Upload results hide the candidate and confidence, show a transient
+50%-opacity blue-green-yellow-red activation heatmap, and withhold shelf-life
+and saving. Rejected Live results show “No final result yet”, keep pause/resume,
+and hide Save Result. Existing accepted results and saved scans retain their
+original model versions; heatmaps are not persisted.
 
-The current model integration is explicitly provisional: the handoff did not
-include a validated confidence threshold, unsupported-input rejection,
-known-fixture parity evidence, cultivar verification, evaluation report, or
-license. Its repository's ROI and output-probability descriptions also remain
-unverified against a supplied fixture and the inspected binary. Automatic
-low-confidence rejection is therefore disabled, and every real result warns
-that model validation is still in progress.
+Upload uses the documented center crop. Live Scan maps the visible covered
+target box into an oriented-frame crop before resize/normalization and does not
+silently fall back to a generic center crop. The model-team threshold,
+unsupported/poor-framing fixtures, raw heatmap reference, and final target-box
+contract remain required before thesis validation claims.
 
 The gallery picker does not request broad media/storage access. Canceling a
 scan clears only Chami's session reference and never deletes or changes the
@@ -200,8 +204,8 @@ the application documents directory.
 
 ## Not implemented
 
-- validated low-confidence threshold, unsupported-input rejection, FP16
-  deployment, or temporal result smoothing
+- calibration evidence for the 0.75 recognition gate, certified OOD evidence,
+  FP16 deployment, or temporal result smoothing
 - local validation of the provisional literature-informed shelf-life
   recommendations against classifier stages
 - Completed-order reopen/audit or delivery business rules; local completed

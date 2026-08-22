@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import 'package:kami/features/scan/application/live_scan_controller.dart';
 import 'package:kami/features/scan/application/live_scan_providers.dart';
 import 'package:kami/features/scan/application/scan_service_providers.dart';
 import 'package:kami/features/scan/data/camera/app_private_live_scan_frame_store.dart';
+import 'package:kami/features/scan/domain/ripeness_classifier.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
 class LiveScanScreen extends ConsumerStatefulWidget {
@@ -233,7 +235,7 @@ class _LiveScanLoading extends StatelessWidget {
   }
 }
 
-class _LiveCameraBody extends StatelessWidget {
+class _LiveCameraBody extends StatefulWidget {
   const _LiveCameraBody({
     required this.controller,
     required this.saving,
@@ -263,23 +265,110 @@ class _LiveCameraBody extends StatelessWidget {
   final VoidCallback onViewHistory;
 
   @override
+  State<_LiveCameraBody> createState() => _LiveCameraBodyState();
+}
+
+class _LiveCameraBodyState extends State<_LiveCameraBody> {
+  final _previewKey = GlobalKey();
+  final _targetKey = GlobalKey();
+  bool _cropUpdateScheduled = false;
+
+  @override
+  void didUpdateWidget(covariant _LiveCameraBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller.session != widget.controller.session) {
+      _scheduleCropUpdate();
+    }
+  }
+
+  void _scheduleCropUpdate() {
+    if (_cropUpdateScheduled) {
+      return;
+    }
+    _cropUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cropUpdateScheduled = false;
+      _updateTargetCrop();
+    });
+  }
+
+  void _updateTargetCrop() {
+    final session = widget.controller.session;
+    final previewContext = _previewKey.currentContext;
+    final targetContext = _targetKey.currentContext;
+    if (session == null || previewContext == null || targetContext == null) {
+      return;
+    }
+    final previewBox = previewContext.findRenderObject();
+    final targetBox = targetContext.findRenderObject();
+    if (previewBox is! RenderBox ||
+        targetBox is! RenderBox ||
+        previewBox.size.isEmpty ||
+        targetBox.size.isEmpty) {
+      return;
+    }
+
+    final targetGlobal = targetBox.localToGlobal(Offset.zero);
+    final previewGlobal = previewBox.localToGlobal(Offset.zero);
+    final target = Rect.fromLTWH(
+      targetGlobal.dx - previewGlobal.dx,
+      targetGlobal.dy - previewGlobal.dy,
+      targetBox.size.width,
+      targetBox.size.height,
+    );
+    final cameraRatio = session.previewAspectRatio <= 0
+        ? 4 / 3
+        : session.previewAspectRatio;
+    final displayRatio =
+        MediaQuery.orientationOf(context) == Orientation.portrait
+        ? 1 / cameraRatio
+        : cameraRatio;
+    final previewSize = previewBox.size;
+    final sourceWidth = displayRatio * 1000;
+    const sourceHeight = 1000.0;
+    final scale = math.max(
+      previewSize.width / sourceWidth,
+      previewSize.height / sourceHeight,
+    );
+    final scaledWidth = sourceWidth * scale;
+    final scaledHeight = sourceHeight * scale;
+    final offsetX = (previewSize.width - scaledWidth) / 2;
+    final offsetY = (previewSize.height - scaledHeight) / 2;
+    final left = ((target.left - offsetX) / scaledWidth).clamp(0.0, 1.0);
+    final top = ((target.top - offsetY) / scaledHeight).clamp(0.0, 1.0);
+    final right = ((target.right - offsetX) / scaledWidth).clamp(0.0, 1.0);
+    final bottom = ((target.bottom - offsetY) / scaledHeight).clamp(0.0, 1.0);
+    final crop = NormalizedCropRect(
+      left: left,
+      top: top,
+      width: right - left,
+      height: bottom - top,
+    );
+    if (crop.isValid) {
+      widget.controller.updateTargetCrop(crop);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final session = controller.session;
+    final session = widget.controller.session;
     if (session == null) {
       return const _LiveScanLoading();
     }
+    _scheduleCropUpdate();
 
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
           Expanded(
+            key: _previewKey,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 _CoverCameraPreview(session: session),
-                const _FruitFramingOverlay(),
-                if (controller.phase == LiveScanPhase.paused)
+                _FruitFramingOverlay(targetKey: _targetKey),
+                if (widget.controller.phase == LiveScanPhase.paused)
                   ColoredBox(
                     color: const Color(0x66000000),
                     child: Center(
@@ -315,18 +404,18 @@ class _LiveCameraBody extends StatelessWidget {
               ),
               child: SingleChildScrollView(
                 child: _LiveResultPanel(
-                  controller: controller,
-                  saving: saving,
-                  savedRecord: savedRecord,
-                  assignedBatchId: assignedBatchId,
-                  saveError: saveError,
-                  onSave: onSave,
-                  onPause: onPause,
-                  onResume: onResume,
-                  onScanAnother: onScanAnother,
-                  onAddToBatch: onAddToBatch,
-                  onViewBatch: onViewBatch,
-                  onViewHistory: onViewHistory,
+                  controller: widget.controller,
+                  saving: widget.saving,
+                  savedRecord: widget.savedRecord,
+                  assignedBatchId: widget.assignedBatchId,
+                  saveError: widget.saveError,
+                  onSave: widget.onSave,
+                  onPause: widget.onPause,
+                  onResume: widget.onResume,
+                  onScanAnother: widget.onScanAnother,
+                  onAddToBatch: widget.onAddToBatch,
+                  onViewBatch: widget.onViewBatch,
+                  onViewHistory: widget.onViewHistory,
                 ),
               ),
             ),
@@ -365,7 +454,9 @@ class _CoverCameraPreview extends StatelessWidget {
 }
 
 class _FruitFramingOverlay extends StatelessWidget {
-  const _FruitFramingOverlay();
+  const _FruitFramingOverlay({required this.targetKey});
+
+  final GlobalKey targetKey;
 
   @override
   Widget build(BuildContext context) {
@@ -399,6 +490,7 @@ class _FruitFramingOverlay extends StatelessWidget {
                   child: SizedBox.square(
                     dimension: 600,
                     child: DecoratedBox(
+                      key: targetKey,
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.white, width: 3),
                         borderRadius: BorderRadius.circular(28),
@@ -448,6 +540,9 @@ class _LiveResultPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = KamiResponsive.isCompactPhone(context);
     final result = controller.result;
+    final rejected =
+        result?.recognitionStatus == RecognitionStatus.notRecognizedOrUnclear ||
+        result?.requiresRetake == true;
     final paused = controller.phase == LiveScanPhase.paused;
     final saved = savedRecord != null;
     return Material(
@@ -485,6 +580,8 @@ class _LiveResultPanel extends StatelessWidget {
                     ),
                   ],
                 )
+              else if (rejected)
+                const _LiveRejectionNotice()
               else
                 _LiveClassification(result: result),
               if (savedRecord case final record?) ...[
@@ -511,22 +608,21 @@ class _LiveResultPanel extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               if (!saved) ...[
-                FilledButton.icon(
-                  onPressed: result == null || result.requiresRetake || saving
-                      ? null
-                      : () => unawaited(onSave()),
-                  icon: saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            semanticsLabel: 'Saving live result',
-                          ),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(saving ? 'Saving...' : 'Save Result'),
-                ),
-                const SizedBox(height: 10),
+                if (!rejected)
+                  FilledButton.icon(
+                    onPressed: saving ? null : () => unawaited(onSave()),
+                    icon: saving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              semanticsLabel: 'Saving live result',
+                            ),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(saving ? 'Saving...' : 'Save Result'),
+                  ),
+                if (!rejected) const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: saving
                       ? null
@@ -616,6 +712,38 @@ class _LiveClassification extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LiveRejectionNotice extends StatelessWidget {
+  const _LiveRejectionNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: 'Fruit not recognized or unclear. No final result yet.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'No final result yet',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Fruit not recognized or unclear. Center one clear supported fruit '
+            'inside the target frame.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

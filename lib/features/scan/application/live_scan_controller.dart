@@ -43,6 +43,7 @@ final class LiveScanController extends ChangeNotifier {
   int _generation = 0;
   String? _failureMessage;
   LiveCameraFailureKind? _failureKind;
+  NormalizedCropRect? _targetCrop;
 
   LiveCameraSession? get session => _session;
   LiveScanPhase get phase => _phase;
@@ -51,6 +52,23 @@ final class LiveScanController extends ChangeNotifier {
   bool get isAnalyzing => _inferenceInFlight;
   String? get failureMessage => _failureMessage;
   LiveCameraFailureKind? get failureKind => _failureKind;
+  NormalizedCropRect? get targetCrop => _targetCrop;
+
+  void updateTargetCrop(NormalizedCropRect crop) {
+    if (_closed || !crop.isValid) {
+      return;
+    }
+    final current = _targetCrop;
+    if (current != null &&
+        current.left == crop.left &&
+        current.top == crop.top &&
+        current.width == crop.width &&
+        current.height == crop.height) {
+      return;
+    }
+    _targetCrop = crop;
+    _notify();
+  }
 
   Future<void> initialize() async {
     if (_closed) {
@@ -63,6 +81,7 @@ final class LiveScanController extends ChangeNotifier {
     _failureKind = null;
     _inferenceInFlight = false;
     _lastInferenceStarted = null;
+    _targetCrop = null;
     _notify();
     await _disposeSession();
     if (!_isCurrent(generation)) {
@@ -162,6 +181,9 @@ final class LiveScanController extends ChangeNotifier {
         _inferenceInFlight) {
       return false;
     }
+    if (_targetCrop == null) {
+      return false;
+    }
     final lastStarted = _lastInferenceStarted;
     return lastStarted == null ||
         _clock.elapsed - lastStarted >= inferenceInterval;
@@ -171,11 +193,16 @@ final class LiveScanController extends ChangeNotifier {
     if (!_shouldAcceptFrame(generation)) {
       return;
     }
+    final targetCrop = _targetCrop;
+    if (targetCrop == null) {
+      return;
+    }
     _inferenceInFlight = true;
     _lastInferenceStarted = _clock.elapsed;
     _notify();
     try {
-      final result = await _classifier.classifyFrame(frame);
+      final classifiedFrame = frame.copyWith(targetCrop: targetCrop);
+      final result = await _classifier.classifyFrame(classifiedFrame);
       if (_isCurrent(generation) && _phase == LiveScanPhase.active) {
         _snapshot = LiveScanSnapshot(frame: frame, classification: result);
       }

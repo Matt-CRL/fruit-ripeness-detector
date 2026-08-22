@@ -14,6 +14,7 @@ void main() {
     pixelScale: 255,
     mean: [0, 0, 0],
     standardDeviation: [1, 1, 1],
+    squareTransform: 'center_crop',
   );
 
   test('converts padded YUV420 camera planes to normalized RGB', () {
@@ -80,6 +81,79 @@ void main() {
 
     expect(values, hasLength(12));
     expect(values.every((value) => (value - (128 / 255)).abs() < 1e-6), isTrue);
+  });
+
+  test('uses the visible normalized target crop before resizing', () {
+    final frame = LiveCameraFrame(
+      width: 4,
+      height: 2,
+      rotationDegrees: 0,
+      pixelFormat: LiveCameraPixelFormat.yuv420,
+      targetCrop: const NormalizedCropRect(
+        left: 0.5,
+        top: 0,
+        width: 0.5,
+        height: 1,
+      ),
+      planes: [
+        LiveCameraPlane(
+          bytes: Uint8List.fromList([20, 20, 220, 220, 20, 20, 220, 220]),
+          bytesPerRow: 4,
+          bytesPerPixel: 1,
+        ),
+        LiveCameraPlane(
+          bytes: Uint8List.fromList([128, 128]),
+          bytesPerRow: 2,
+          bytesPerPixel: 1,
+        ),
+        LiveCameraPlane(
+          bytes: Uint8List.fromList([128, 128]),
+          bytesPerRow: 2,
+          bytesPerPixel: 1,
+        ),
+      ],
+    );
+
+    final values = preprocessCameraFrame(frame, contract);
+
+    expect(values, hasLength(12));
+    expect(values[0], closeTo(220 / 255, 1e-6));
+    expect(values[3], closeTo(220 / 255, 1e-6));
+  });
+
+  test('target crop remains valid for the supported rotated frame path', () {
+    const crop = NormalizedCropRect(
+      left: 0.2,
+      top: 0.1,
+      width: 0.6,
+      height: 0.8,
+    );
+    final frame = LiveCameraFrame(
+      width: 2,
+      height: 4,
+      rotationDegrees: 90,
+      pixelFormat: LiveCameraPixelFormat.yuv420,
+      targetCrop: crop,
+      planes: [
+        LiveCameraPlane(
+          bytes: Uint8List.fromList(List<int>.filled(8, 128)),
+          bytesPerRow: 2,
+          bytesPerPixel: 1,
+        ),
+        LiveCameraPlane(
+          bytes: Uint8List.fromList([128, 128]),
+          bytesPerRow: 1,
+          bytesPerPixel: 1,
+        ),
+        LiveCameraPlane(
+          bytes: Uint8List.fromList([128, 128]),
+          bytesPerRow: 1,
+          bytesPerPixel: 1,
+        ),
+      ],
+    );
+
+    expect(() => preprocessCameraFrame(frame, contract), returnsNormally);
   });
 
   test('rejects incomplete camera plane data', () {
