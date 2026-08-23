@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/app/router/app_routes.dart';
@@ -27,12 +28,17 @@ class LiveScanScreen extends ConsumerStatefulWidget {
 
 class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     with WidgetsBindingObserver {
+  static const _appSettingsChannel = MethodChannel(
+    'ph.fruitripeness.kami/app_settings',
+  );
+
   late final LiveScanController _controller;
   SavedScanRecord? _savedRecord;
   String? _assignedBatchId;
   String? _reservedScanId;
   String? _saveError;
   bool _saving = false;
+  bool _retryWhenResumed = false;
 
   @override
   void initState() {
@@ -55,7 +61,10 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        if (_controller.phase == LiveScanPhase.suspended) {
+        if (_retryWhenResumed) {
+          _retryWhenResumed = false;
+          _retryCamera();
+        } else if (_controller.phase == LiveScanPhase.suspended) {
           _resetSaveState();
           unawaited(_controller.initialize());
         }
@@ -174,6 +183,34 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     );
   }
 
+  void _retryCamera() {
+    // Recreate the camera controller and route after a denial. The Android
+    // camera plugin owns the permission request lifecycle, so reusing the
+    // failed controller can leave the next attempt without a prompt.
+    context.replace(
+      '${AppRoutes.scanLive}?retry=${DateTime.now().microsecondsSinceEpoch}',
+    );
+  }
+
+  Future<void> _openAppSettings() async {
+    _retryWhenResumed = true;
+    try {
+      await _appSettingsChannel.invokeMethod<void>('open');
+    } on Object {
+      _retryWhenResumed = false;
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Open Android Settings, choose Chami, and allow camera access.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,7 +223,8 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
           kind: _controller.failureKind,
           message:
               _controller.failureMessage ?? 'Chami could not start Live Scan.',
-          onRetry: () => unawaited(_controller.initialize()),
+          onRetry: _retryCamera,
+          onOpenSettings: _openAppSettings,
         ),
         LiveScanPhase.active || LiveScanPhase.paused => _LiveCameraBody(
           controller: _controller,
@@ -824,16 +862,20 @@ class _LiveScanFailure extends StatelessWidget {
     required this.kind,
     required this.message,
     required this.onRetry,
+    required this.onOpenSettings,
   });
 
   final LiveCameraFailureKind? kind;
   final String message;
   final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
     final permissionFailure =
         kind == LiveCameraFailureKind.permissionDenied ||
+        kind == LiveCameraFailureKind.permissionPermanentlyDenied;
+    final permanentlyBlocked =
         kind == LiveCameraFailureKind.permissionPermanentlyDenied;
     final title = switch (kind) {
       LiveCameraFailureKind.permissionDenied ||
@@ -876,11 +918,24 @@ class _LiveScanFailure extends StatelessWidget {
                     const SizedBox(height: 10),
                     Text(message, textAlign: TextAlign.center),
                     const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Try again'),
-                    ),
+                    if (permanentlyBlocked) ...[
+                      FilledButton.icon(
+                        onPressed: onOpenSettings,
+                        icon: const Icon(Icons.settings_outlined),
+                        label: const Text('Open settings'),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try again'),
+                      ),
+                    ] else
+                      FilledButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try again'),
+                      ),
                   ],
                 ),
               ),

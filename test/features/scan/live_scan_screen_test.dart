@@ -112,6 +112,64 @@ void main() {
     expect(find.text('Try again'), findsOneWidget);
   });
 
+  testWidgets('permanently denied camera permission offers app settings', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          liveCameraGatewayProvider.overrideWithValue(
+            const _PermanentlyDeniedCameraGateway(),
+          ),
+          liveScanClassifierProvider.overrideWithValue(_WidgetTestClassifier()),
+        ],
+        child: const MaterialApp(home: LiveScanScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Open settings'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('Try again recreates the camera request after a denial', (
+    tester,
+  ) async {
+    final gateway = _RetryCameraGateway();
+    final router = GoRouter(
+      initialLocation: '/scan/live',
+      routes: [
+        GoRoute(
+          path: '/scan/live',
+          builder: (context, state) => const LiveScanScreen(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          liveCameraGatewayProvider.overrideWithValue(gateway),
+          liveScanClassifierProvider.overrideWithValue(_WidgetTestClassifier()),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Camera permission needed'), findsOneWidget);
+    expect(gateway.openCalls, 1);
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.openCalls, 2);
+    expect(find.text('Camera permission needed'), findsNothing);
+  });
+
   testWidgets(
     'saves the displayed frame and result once with a direct batch action',
     (tester) async {
@@ -285,6 +343,35 @@ final class _DeniedCameraGateway implements LiveCameraGateway {
       LiveCameraFailureKind.permissionDenied,
       'Camera access was denied. Allow it to use Live Scan.',
     );
+  }
+}
+
+final class _PermanentlyDeniedCameraGateway implements LiveCameraGateway {
+  const _PermanentlyDeniedCameraGateway();
+
+  @override
+  Future<LiveCameraSession> openRearCamera() {
+    throw const LiveCameraFailure(
+      LiveCameraFailureKind.permissionPermanentlyDenied,
+      'Camera access is blocked. Enable it for Chami in Android Settings, then try again.',
+    );
+  }
+}
+
+final class _RetryCameraGateway implements LiveCameraGateway {
+  final _WidgetTestCameraSession session = _WidgetTestCameraSession();
+  int openCalls = 0;
+
+  @override
+  Future<LiveCameraSession> openRearCamera() async {
+    openCalls++;
+    if (openCalls == 1) {
+      throw const LiveCameraFailure(
+        LiveCameraFailureKind.permissionDenied,
+        'Camera access was denied. Allow it to use Live Scan.',
+      );
+    }
+    return session;
   }
 }
 

@@ -102,6 +102,44 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Synchronization')).dy),
     );
   });
+
+  testWidgets('cancelling account deletion leaves Profile stable', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(1080, 2400));
+    await _pumpSignedInProfile(tester);
+
+    await tester.tap(find.text('Delete account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete account?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete account?'), findsNothing);
+    expect(find.text('Confirm permanent deletion'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cancelling deletion password prompt leaves Profile stable', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(1080, 2400));
+    await _pumpSignedInProfile(tester);
+
+    await tester.tap(find.text('Delete account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm permanent deletion'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Confirm permanent deletion'), findsNothing);
+    expect(find.text('Delete account?'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {

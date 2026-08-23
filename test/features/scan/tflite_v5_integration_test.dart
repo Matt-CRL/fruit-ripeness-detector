@@ -20,7 +20,7 @@ void main() {
       expect(result.fruit, FruitIdentifier.lakatanBanana);
       expect(result.ripeness, RipenessStage.unripe);
       expect(result.modelConfidence, greaterThan(0.75));
-      expect(result.modelVersion, 'mobilenetv4-fruit-enhanced-v5');
+      expect(result.modelVersion, 'mobilenetv4-fruit-v5-7ea0a20');
       expect(result.recognitionStatus, RecognitionStatus.recognized);
     },
     skip: Platform.isWindows

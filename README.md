@@ -47,9 +47,12 @@ part of this repository.
   bubble while keeping the scan explanation and action below
 - Android Photo Picker upload through `image_picker`, selected-image preview,
   cancellation/replacement, and lost-result recovery
-- pinned offline FLOAT32 TFLite upload-image inference using
-  `tflite_flutter`, checksum/tensor manifest validation, orientation-aware
-  center-crop/ImageNet preprocessing, stable Softmax, and nine ordered labels
+- pinned offline FLOAT32 TFLite v5 inference using `tflite_flutter`, checksum
+  and tensor-manifest validation, direct nine-class probability decoding, and
+  the supplied ordered labels; Upload runs the bundled U2-Net foreground
+  matting model, crops the foreground onto a black square, and then applies
+  ImageNet normalization, while Live Scan uses only its mapped target-box crop
+  for faster repeated inference
 - rear-camera Live Scan using Flutter CameraX, on-demand camera permission,
   direct YUV420-to-RGB frame preprocessing, single-flight throttled inference,
   updating model results, pause/resume, exact frame/result saving to History,
@@ -170,9 +173,11 @@ Authorized private-team clones include the v5 heatmap bundle:
 - `assets/models/fruit_ripeness_v5_heatmap.tflite`
 - `assets/models/fruit_ripeness_v5.manifest.json`
 - `assets/models/fruit_ripeness_v5_labels.txt`
+- `assets/models/u2net.tflite` (Upload-only foreground matting auxiliary model)
 
 The bundle is sourced from the private
-`fruit_enhancedmodel_mobilenetv5` repository at commit `7ea0a20` and is pinned
+`fruit_enhancedmodel_mobilenetv5` repository at commit
+`7ea0a20a1d09645e26d4c3c4116645da4b8b44d0` and is pinned
 to SHA-256
 `D678CCE9A7D3DEE3475ADFDDE14F272F95D21E0ECB6651CD2619EBB25A5912F3`.
 The manifest validates one FLOAT32 `[1,224,224,3]` input, the exact nine-label
@@ -180,6 +185,13 @@ order, a probability output `[1,9]`, and a heatmap output `[1,1,7,7]` before
 inference. The model version is `mobilenetv4-fruit-v5-7ea0a20`. Do not
 redistribute the model outside the authorized research team or make the
 repository public until the model owner confirms distribution rights.
+
+The manifest also pins the U2-Net asset to SHA-256
+`447287302DCE2B969CA7DBF7E73E36C5E494C23D93A79F095710181B8AC271C0` and
+validates its FLOAT32 `[1,3,320,320]` → `[1,1,320,320]` tensor contract before
+use. U2-Net is an app-bundled auxiliary artifact; it is not present in the
+pinned trainer repository handoff, so its upstream source/license and training
+provenance remain open documentation items.
 
 Output 0 is already Softmax probabilities; Chami does not apply a second
 Softmax. A maximum-probability gate at `0.75` reports “Fruit not recognized or
@@ -190,9 +202,10 @@ and saving. Rejected Live results show “No final result yet”, keep pause/res
 and hide Save Result. Existing accepted results and saved scans retain their
 original model versions; heatmaps are not persisted.
 
-Upload uses the documented center crop. Live Scan maps the visible covered
-target box into an oriented-frame crop before resize/normalization and does not
-silently fall back to a generic center crop. The model-team threshold,
+Upload uses U2-Net matting and a tight black-canvas square crop (with a
+letterbox fallback if matting is unavailable). Live Scan maps the visible
+covered target box into an oriented-frame crop before resize/normalization and
+does not run U2-Net or render a continuous heatmap. The model-team threshold,
 unsupported/poor-framing fixtures, raw heatmap reference, and final target-box
 contract remain required before thesis validation claims.
 
@@ -205,7 +218,8 @@ the application documents directory.
 ## Not implemented
 
 - calibration evidence for the 0.75 recognition gate, certified OOD evidence,
-  FP16 deployment, or temporal result smoothing
+  U2-Net source/license provenance, representative Upload/Live latency and
+  memory measurements, FP16 deployment, or temporal result smoothing
 - local validation of the provisional literature-informed shelf-life
   recommendations against classifier stages
 - Completed-order reopen/audit or delivery business rules; local completed

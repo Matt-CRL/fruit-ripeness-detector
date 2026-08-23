@@ -163,15 +163,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         return;
       }
       final eligibility = await service.checkEligibility(account.id);
-      if (eligibility != WorkspaceLinkEligibility.eligible) {
+      // `localAlreadyLinked` is idempotent: the registry already belongs to
+      // this account/workspace, so allow the claim/reconciliation path to
+      // repair local state instead of treating it as a conflict. This can
+      // happen after an interrupted link or a response lost after the RPC
+      // committed remotely.
+      final canContinue =
+          eligibility == WorkspaceLinkEligibility.eligible ||
+          eligibility == WorkspaceLinkEligibility.localAlreadyLinked;
+      if (!canContinue) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                eligibility == WorkspaceLinkEligibility.accountLinkedElsewhere
-                    ? 'This account is already linked to another device.'
-                    : 'This device cannot be linked right now. Check your '
-                          'connection and try again.',
+                switch (eligibility) {
+                  WorkspaceLinkEligibility.accountLinkedElsewhere =>
+                    'This account is already linked to another device.',
+                  WorkspaceLinkEligibility.workspaceLinked =>
+                    'This offline workspace is already linked to another '
+                        'account.',
+                  WorkspaceLinkEligibility.pendingRelease =>
+                    'A previous unlink is still waiting for cloud '
+                        'confirmation. Try again when you are online.',
+                  WorkspaceLinkEligibility.unavailable =>
+                    'Chami could not verify the link with the cloud. Check '
+                        'your connection and try again.',
+                  WorkspaceLinkEligibility.eligible ||
+                  WorkspaceLinkEligibility.localAlreadyLinked =>
+                    'This device cannot be linked right now. Try again.',
+                },
               ),
             ),
           );
@@ -181,8 +201,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final result = await service.link(account.id);
       if (result != WorkspaceLinkResult.linked) {
         if (mounted) {
+          final message = switch (result) {
+            WorkspaceLinkResult.accountLinkedElsewhere =>
+              'This account is already linked to another device.',
+            WorkspaceLinkResult.workspaceLinked =>
+              'This offline workspace is already linked to another account.',
+            WorkspaceLinkResult.localAlreadyLinked =>
+              'This account is already linked to this device.',
+            WorkspaceLinkResult.unavailable =>
+              'Chami could not verify the link with the cloud. Check your '
+                  'connection and try again.',
+            WorkspaceLinkResult.linked => 'This device is now linked.',
+          };
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('This device could not be linked.')),
+            SnackBar(content: Text(message)),
           );
         }
         return;
@@ -242,7 +274,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This device could not be linked.')),
+          SnackBar(
+            content: Text(
+              linkAccepted
+                  ? 'The account link was rolled back because local data '
+                        'could not be restored. Your Guest data was kept.'
+                  : 'This device could not be linked. Try again when you are '
+                        'online.',
+            ),
+          ),
         );
       }
     } finally {
@@ -458,16 +498,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
     if (choice != 'delete' || !mounted) return;
-    final passwordController = TextEditingController();
+    var enteredPassword = '';
     final password = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm permanent deletion'),
         content: TextField(
-          controller: passwordController,
           obscureText: true,
           autofocus: true,
+          onChanged: (value) => enteredPassword = value,
           decoration: const InputDecoration(
             labelText: 'Current password',
             helperText: 'Reauthentication is required.',
@@ -479,29 +519,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(passwordController.text),
+            onPressed: () => Navigator.of(dialogContext).pop(enteredPassword),
             child: const Text('Delete permanently'),
           ),
         ],
       ),
     );
-    passwordController.dispose();
     if (password == null || password.isEmpty || !mounted) return;
     setState(() => _accountActionRunning = true);
     try {
       await ref
           .read(accountSessionServiceProvider)
           .deleteAccount(password: password);
-      if (mounted) context.go(AppRoutes.accountChoice);
+      if (!mounted) return;
+
+      // Clear the local loading state before changing routes. The account
+      // deletion also emits a signed-out auth event, which can dispose this
+      // Profile route while go_router is moving to Account Choice. Updating
+      // state from the old route after navigation causes the red Flutter
+      // "setState after dispose" screen observed after successful deletion.
+      setState(() => _accountActionRunning = false);
+      context.go(AppRoutes.accountChoice);
     } on AccountSessionException catch (error) {
       if (mounted) {
+        setState(() => _accountActionRunning = false);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.message)));
       }
-    } finally {
-      if (mounted) setState(() => _accountActionRunning = false);
+    } on Object {
+      if (mounted) {
+        setState(() => _accountActionRunning = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The account could not be deleted cleanly. Please restart Chami '
+              'and check your connection before trying again.',
+            ),
+          ),
+        );
+      }
     }
   }
 

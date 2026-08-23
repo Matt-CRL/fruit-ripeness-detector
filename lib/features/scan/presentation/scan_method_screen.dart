@@ -5,72 +5,92 @@ import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
 
 class ScanMethodScreen extends StatelessWidget {
-  const ScanMethodScreen({super.key});
+  const ScanMethodScreen({this.fromRescan = false, super.key});
+
+  final bool fromRescan;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Scan fruit')),
-      body: ListView(
-        padding: KamiResponsive.pagePadding(context, top: 16, bottom: 32),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Choose a scan method',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Upload a clear photo or assess one fruit continuously '
-                    'with the rear camera.',
-                  ),
-                  const SizedBox(height: 24),
-                  _ScanMethodCard(
-                    icon: Icons.photo_library_outlined,
-                    title: 'Upload image',
-                    description:
-                        'Choose a clear fruit photo from your Android device.',
-                    trailing: const Icon(Icons.arrow_forward),
-                    onTap: () => context.push(AppRoutes.scanUpload),
-                  ),
-                  const SizedBox(height: 16),
-                  _ScanMethodCard(
-                    icon: Icons.center_focus_strong_outlined,
-                    title: 'Live Scan',
-                    description:
-                        'Point the camera at one fruit and see the result and '
-                        'confidence update while scanning.',
-                    trailing: const Icon(Icons.arrow_forward),
-                    onTap: () => context.push(AppRoutes.scanLive),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    margin: EdgeInsets.zero,
-                    child: const ListTile(
-                      leading: Icon(
-                        Icons.privacy_tip_outlined,
-                        color: AppColors.brandGreen,
-                      ),
-                      title: Text(
-                        'Camera access is requested only when needed',
-                      ),
-                      subtitle: Text(
-                        'Choosing Live Scan asks for camera permission. Frames '
-                        'are assessed on this device, and only a result you '
-                        'explicitly save is retained in History.',
+    void leaveToHome() => context.go(AppRoutes.home);
+
+    return PopScope(
+      canPop: !fromRescan,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && fromRescan && context.mounted) {
+          leaveToHome();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: fromRescan
+              ? IconButton(
+                  onPressed: leaveToHome,
+                  tooltip: 'Back to home',
+                  icon: const Icon(Icons.arrow_back),
+                )
+              : null,
+          title: const Text('Scan fruit'),
+        ),
+        body: ListView(
+          padding: KamiResponsive.pagePadding(context, top: 16, bottom: 32),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Choose a scan method',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Upload a clear photo or assess one fruit continuously '
+                      'with the rear camera.',
+                    ),
+                    const SizedBox(height: 24),
+                    _ScanMethodCard(
+                      icon: Icons.photo_library_outlined,
+                      title: 'Upload image',
+                      description:
+                          'Upload image for a more thorough assessment (may take a moment).',
+                      trailing: const Icon(Icons.arrow_forward),
+                      onTap: () => context.push(AppRoutes.scanUpload),
+                    ),
+                    const SizedBox(height: 16),
+                    _ScanMethodCard(
+                      icon: Icons.center_focus_strong_outlined,
+                      title: 'Live Scan',
+                      description:
+                          'Live scan provides quicker results without Grad‑CAM overlay or background removal.',
+                      trailing: const Icon(Icons.arrow_forward),
+                      onTap: () => context.push(AppRoutes.scanLive),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      margin: EdgeInsets.zero,
+                      child: const ListTile(
+                        leading: Icon(
+                          Icons.privacy_tip_outlined,
+                          color: AppColors.brandGreen,
+                        ),
+                        title: Text(
+                          'Camera access is requested only when needed',
+                        ),
+                        subtitle: Text(
+                          'Choosing Live Scan asks for camera permission. Frames '
+                          'are assessed on this device, and only a result you '
+                          'explicitly save is retained in History.',
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -51,32 +51,43 @@ final class OfflineWorkspaceLinkService {
       final workspaceId = await _store.readOrCreateWorkspaceId();
       final installationId = await _store.readOrCreateInstallationId();
       final token = await _store.readRevocationToken() ?? const Uuid().v4();
-      final raw = await client.rpc(
-        'claim_offline_workspace_link',
-        params: {
-          'p_workspace_id': workspaceId,
-          'p_installation_id': installationId,
-          'p_revocation_token': token,
-        },
-      );
-      final status = _statusFromResponse(raw);
-      switch (status) {
-        case 'linked':
-          await _store.writeRevocationToken(token);
-          return WorkspaceLinkResult.linked;
-        case 'local_already_linked':
-          // A legacy installation may already be registered without a local
-          // token. The authenticated release RPC remains available, but do
-          // not overwrite secure storage with a token that the registry did
-          // not issue for this workspace.
-          return WorkspaceLinkResult.linked;
-        case 'linked_elsewhere':
-          return WorkspaceLinkResult.accountLinkedElsewhere;
-        case 'workspace_linked':
-          return WorkspaceLinkResult.workspaceLinked;
-        default:
-          return WorkspaceLinkResult.unavailable;
+      // A successful claim can be committed remotely even if the first RPC
+      // response is lost. Retrying once is safe because the backend returns
+      // local_already_linked for the same account/workspace pair.
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          final raw = await client.rpc(
+            'claim_offline_workspace_link',
+            params: {
+              'p_workspace_id': workspaceId,
+              'p_installation_id': installationId,
+              'p_revocation_token': token,
+            },
+          );
+          final status = _statusFromResponse(raw);
+          switch (status) {
+            case 'linked':
+              await _store.writeRevocationToken(token);
+              return WorkspaceLinkResult.linked;
+            case 'local_already_linked':
+              // A legacy installation may already be registered without a
+              // local token. The authenticated release RPC remains available,
+              // but do not overwrite secure storage with a token that the
+              // registry did not issue for this workspace.
+              return WorkspaceLinkResult.linked;
+            case 'linked_elsewhere':
+              return WorkspaceLinkResult.accountLinkedElsewhere;
+            case 'workspace_linked':
+              return WorkspaceLinkResult.workspaceLinked;
+            default:
+              if (attempt == 0) continue;
+              return WorkspaceLinkResult.unavailable;
+          }
+        } on Object {
+          if (attempt == 1) return WorkspaceLinkResult.unavailable;
+        }
       }
+      return WorkspaceLinkResult.unavailable;
     } on Object {
       return WorkspaceLinkResult.unavailable;
     }

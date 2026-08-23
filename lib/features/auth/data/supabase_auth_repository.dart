@@ -27,7 +27,18 @@ final class SupabaseAuthRepository implements AuthRepository {
         data: <String, dynamic>{'display_name': displayName.trim()},
         emailRedirectTo: callbackUrl,
       );
-      final user = _mapUser(response.user);
+      // Supabase may return an obfuscated user instead of an AuthException
+      // when email enumeration protection is enabled. Existing email signups
+      // have an empty identities list, so surface the actionable conflict
+      // rather than showing the normal verification-success dialog.
+      final rawUser = response.user;
+      final identities = rawUser?.identities;
+      if (identities != null && identities.isEmpty) {
+        throw const AccountAuthException(
+          'This email is already used. Try signing in or use a different email.',
+        );
+      }
+      final user = _mapUser(rawUser);
       if (user == null) {
         throw const AccountAuthException(
           'Account creation could not be completed. Please try again.',
@@ -183,6 +194,14 @@ final class SupabaseAuthRepository implements AuthRepository {
 
   static String _safeMessage(AuthException error) {
     final message = error.message.toLowerCase();
+    final code = error.code?.toLowerCase();
+    if (code == 'email_exists' ||
+        code == 'user_already_exists' ||
+        code == 'identity_already_exists' ||
+        message.contains('already registered') ||
+        message.contains('already exists')) {
+      return 'This email is already used. Try signing in or use a different email.';
+    }
     if (message.contains('password')) {
       return 'Use at least 8 characters with uppercase, lowercase, and a number.';
     }

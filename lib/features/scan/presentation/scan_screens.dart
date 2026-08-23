@@ -20,26 +20,22 @@ import 'package:kami/features/scan/presentation/scan_image_provider.dart';
 import 'package:kami/features/scan/presentation/model_confidence_indicator.dart';
 import 'package:kami/features/scan/presentation/shelf_life_guidance_card.dart';
 
-enum ScanEntryMode { standard, rescan }
-
-enum LowConfidenceAction { uploadNewPhoto, returnToPreviousResult }
+enum LowConfidenceAction { uploadNewPhoto }
 
 final class LowConfidencePreview {
   const LowConfidencePreview({
     required this.image,
     required this.classification,
-    required this.entryMode,
   });
 
   final SelectedScanImage image;
   final ClassificationResult classification;
-  final ScanEntryMode entryMode;
 }
 
 class ScanScreen extends ConsumerStatefulWidget {
-  const ScanScreen({this.entryMode = ScanEntryMode.standard, super.key});
+  const ScanScreen({this.openedFromRescan = false, super.key});
 
-  final ScanEntryMode entryMode;
+  final bool openedFromRescan;
 
   @override
   ConsumerState<ScanScreen> createState() => _ScanScreenState();
@@ -165,11 +161,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         shelfLife: advisor.estimate(result),
       );
 
-      if (widget.entryMode == ScanEntryMode.rescan) {
-        context.pop(preview);
-        return;
-      }
-
       await context.push(AppRoutes.scanResult, extra: preview);
     } on RipenessClassificationException catch (error) {
       if (mounted) {
@@ -200,7 +191,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       extra: LowConfidencePreview(
         image: image,
         classification: result,
-        entryMode: widget.entryMode,
       ),
     );
     if (!mounted) {
@@ -208,9 +198,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
     if (action == LowConfidenceAction.uploadNewPhoto) {
       await _chooseFromGallery();
-    } else if (action == LowConfidenceAction.returnToPreviousResult &&
-        widget.entryMode == ScanEntryMode.rescan) {
-      context.pop();
     }
   }
 
@@ -221,69 +208,80 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         ? null
         : ref.watch(scanImageProviderFactoryProvider)(selectedImage.path);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Upload image')),
-      body: ListView(
-        padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (widget.entryMode == ScanEntryMode.rescan) ...[
-                    OutlinedButton.icon(
-                      onPressed: _isBusy ? null : () => context.pop(),
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Return to previous result'),
+    void leaveRescanFlow() => context.go(AppRoutes.scan, extra: true);
+
+    return PopScope(
+      canPop: !widget.openedFromRescan,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && widget.openedFromRescan && context.mounted) {
+          leaveRescanFlow();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: widget.openedFromRescan
+              ? IconButton(
+                  onPressed: leaveRescanFlow,
+                  tooltip: 'Back to scan methods',
+                  icon: const Icon(Icons.arrow_back),
+                )
+              : null,
+          title: const Text('Upload image'),
+        ),
+        body: ListView(
+          padding: KamiResponsive.pagePadding(context, top: 8, bottom: 32),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Upload one fruit image',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Choose one clear photo with one fruit centered in the '
+                      'frame.',
                     ),
                     const SizedBox(height: 24),
+                    if (selectedImage == null)
+                      _EmptyUploadPanel(
+                        busy: _isBusy,
+                        isPicking: _isPicking,
+                        onChoose: _chooseFromGallery,
+                      )
+                    else
+                      _SelectedImagePanel(
+                        image: selectedImage,
+                        imageProvider: selectedImageProvider!,
+                        busy: _isBusy,
+                        previewReady: _previewReady,
+                        onPreviewStateChanged: _setPreviewReady,
+                        onChange: _chooseFromGallery,
+                        onClear: _clearSelection,
+                        onUse: _usePhoto,
+                      ),
+                    if (_isPicking) ...[
+                      const SizedBox(height: 16),
+                      const LinearProgressIndicator(
+                        semanticsLabel: 'Opening Android photo picker',
+                      ),
+                    ],
+                    if (_errorMessage case final message?) ...[
+                      const SizedBox(height: 16),
+                      _InlineError(title: _errorTitle, message: message),
+                    ],
+                    const SizedBox(height: 20),
+                    const _PreviewOnlyNotice(),
                   ],
-                  Text(
-                    'Upload one fruit image',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Choose one clear photo with one fruit centered in the '
-                    'frame.',
-                  ),
-                  const SizedBox(height: 24),
-                  if (selectedImage == null)
-                    _EmptyUploadPanel(
-                      busy: _isBusy,
-                      isPicking: _isPicking,
-                      onChoose: _chooseFromGallery,
-                    )
-                  else
-                    _SelectedImagePanel(
-                      image: selectedImage,
-                      imageProvider: selectedImageProvider!,
-                      busy: _isBusy,
-                      previewReady: _previewReady,
-                      onPreviewStateChanged: _setPreviewReady,
-                      onChange: _chooseFromGallery,
-                      onClear: _clearSelection,
-                      onUse: _usePhoto,
-                    ),
-                  if (_isPicking) ...[
-                    const SizedBox(height: 16),
-                    const LinearProgressIndicator(
-                      semanticsLabel: 'Opening Android photo picker',
-                    ),
-                  ],
-                  if (_errorMessage case final message?) ...[
-                    const SizedBox(height: 16),
-                    _InlineError(title: _errorTitle, message: message),
-                  ],
-                  const SizedBox(height: 20),
-                  const _PreviewOnlyNotice(),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -604,18 +602,12 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     _saving = false;
   }
 
-  Future<void> _rescan() async {
-    final replacement = await context.push<ScanPreview>(
-      AppRoutes.scanUpload,
-      extra: ScanEntryMode.rescan,
-    );
-    if (!mounted || replacement == null) {
-      return;
-    }
-    setState(() {
-      _preview = replacement;
-      _resetSaveState();
-    });
+  void _rescan() {
+    // Replace the current result instead of pushing a nested rescan route.
+    // A fresh upload therefore has no "Return to previous result" affordance,
+    // and Android Back returns to the scan method rather than looping through
+    // earlier assessment results.
+    context.pushReplacement(AppRoutes.scanUpload, extra: true);
   }
 
   Future<void> _chooseSaveResult() async {
@@ -709,9 +701,9 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                   _ResultImageCard(
                     imageName: value.image.name,
                     imageProvider: imageProvider,
-                    isolatedImageBytes: classification.isolatedImageBytes,
-                    gradCamImageBytes: classification.gradCamImageBytes,
-                    heatmap: classification.heatmap,
+                    isolatedImageBytes: null,
+                    gradCamImageBytes: null,
+                    heatmap: null,
                   ),
                   const SizedBox(height: 16),
                   if (classification.origin == ResultOrigin.demo) ...[
@@ -848,16 +840,20 @@ class _ResultImageCard extends StatefulWidget {
   const _ResultImageCard({
     required this.imageName,
     required this.imageProvider,
+    this.rejected = false,
     this.isolatedImageBytes,
     this.gradCamImageBytes,
     this.heatmap,
+    this.initialViewMode,
   });
 
   final String imageName;
   final ImageProvider<Object> imageProvider;
+  final bool rejected;
   final Uint8List? isolatedImageBytes;
   final Uint8List? gradCamImageBytes;
   final ActivationHeatmap? heatmap;
+  final _ResultViewMode? initialViewMode;
 
   @override
   State<_ResultImageCard> createState() => _ResultImageCardState();
@@ -869,9 +865,15 @@ class _ResultImageCardState extends State<_ResultImageCard> {
   @override
   void initState() {
     super.initState();
-    _viewMode = widget.isolatedImageBytes != null
-        ? _ResultViewMode.isolated
-        : _ResultViewMode.original;
+    final hasGradCam =
+        widget.gradCamImageBytes != null || widget.heatmap != null;
+    final requestedMode = widget.initialViewMode;
+    _viewMode = requestedMode == _ResultViewMode.gradCam && !hasGradCam
+        ? _ResultViewMode.original
+        : requestedMode ??
+            (widget.isolatedImageBytes != null
+                ? _ResultViewMode.isolated
+                : _ResultViewMode.original);
   }
 
   @override
@@ -892,8 +894,11 @@ class _ResultImageCardState extends State<_ResultImageCard> {
             : widget.imageProvider;
     }
 
-    final hasMultiView = widget.isolatedImageBytes != null ||
-        widget.gradCamImageBytes != null;
+    final hasGradCam =
+        widget.gradCamImageBytes != null || widget.heatmap != null;
+    final hasMultiView = widget.rejected
+        ? hasGradCam
+        : widget.isolatedImageBytes != null || hasGradCam;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -931,10 +936,12 @@ class _ResultImageCardState extends State<_ResultImageCard> {
                       },
                     ),
                     if (widget.heatmap != null &&
-                        _viewMode == _ResultViewMode.original)
+                        widget.gradCamImageBytes == null &&
+                        _viewMode == _ResultViewMode.gradCam)
                       Positioned.fill(
                         child: IgnorePointer(
                           child: CustomPaint(
+                            key: const Key('rejected-gradcam-overlay'),
                             painter: _ActivationHeatmapPainter(widget.heatmap!),
                           ),
                         ),
@@ -948,22 +955,24 @@ class _ResultImageCardState extends State<_ResultImageCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: SegmentedButton<_ResultViewMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: _ResultViewMode.isolated,
-                    label: Text('Isolated'),
-                    icon: Icon(Icons.crop_outlined, size: 16),
-                  ),
-                  ButtonSegment(
+                segments: [
+                  if (!widget.rejected && widget.isolatedImageBytes != null)
+                    const ButtonSegment(
+                      value: _ResultViewMode.isolated,
+                      label: Text('Isolated'),
+                      icon: Icon(Icons.crop_outlined, size: 16),
+                    ),
+                  const ButtonSegment(
                     value: _ResultViewMode.original,
                     label: Text('Original'),
                     icon: Icon(Icons.photo_outlined, size: 16),
                   ),
-                  ButtonSegment(
-                    value: _ResultViewMode.gradCam,
-                    label: Text('Grad-CAM'),
-                    icon: Icon(Icons.visibility_outlined, size: 16),
-                  ),
+                  if (hasGradCam)
+                    const ButtonSegment(
+                      value: _ResultViewMode.gradCam,
+                      label: Text('Grad-CAM'),
+                      icon: Icon(Icons.visibility_outlined, size: 16),
+                    ),
                 ],
                 selected: {_viewMode},
                 onSelectionChanged: (selected) {
@@ -1256,17 +1265,17 @@ class LowConfidenceResultScreen extends ConsumerWidget {
     final imageProvider = ref.watch(scanImageProviderFactoryProvider)(
       value.image.path,
     );
-    final canReturnToPreviousResult = value.entryMode == ScanEntryMode.rescan;
     final rejected =
         value.classification.recognitionStatus ==
         RecognitionStatus.notRecognizedOrUnclear;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
           rejected
               ? 'Fruit not recognized or unclear'
               : 'Low-confidence result',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
       body: ListView(
@@ -1281,18 +1290,25 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                   _ResultImageCard(
                     imageName: value.image.name,
                     imageProvider: imageProvider,
+                    rejected: rejected,
                     isolatedImageBytes: value.classification.isolatedImageBytes,
                     gradCamImageBytes: value.classification.gradCamImageBytes,
                     heatmap: rejected ? value.classification.heatmap : null,
+                    initialViewMode: rejected
+                        ? value.classification.gradCamImageBytes != null ||
+                                value.classification.heatmap != null
+                            ? _ResultViewMode.gradCam
+                            : _ResultViewMode.original
+                        : null,
                   ),
                   const SizedBox(height: 12),
-                  _LowConfidenceWarning(
+                  _LowAccuracyNotice(
                     origin: value.classification.origin,
                     rejected: rejected,
                   ),
                   const SizedBox(height: 16),
                   if (rejected) ...[
-                    const _HeatmapExplanation(),
+                    const _GradCamExplanationCard(),
                   ] else ...[
                     _ResultSummaryCard(
                       classification: value.classification,
@@ -1313,20 +1329,11 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                     label: const Text('Upload a new photo'),
                   ),
                   const SizedBox(height: 12),
-                  if (canReturnToPreviousResult)
-                    OutlinedButton.icon(
-                      onPressed: () => context.pop(
-                        LowConfidenceAction.returnToPreviousResult,
-                      ),
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Return to previous result'),
-                    )
-                  else
-                    OutlinedButton.icon(
-                      onPressed: () => context.pop(),
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back to selected image'),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.pop(),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Back to selected image'),
+                  ),
                 ],
               ),
             ),
@@ -1337,8 +1344,8 @@ class LowConfidenceResultScreen extends ConsumerWidget {
   }
 }
 
-class _LowConfidenceWarning extends StatelessWidget {
-  const _LowConfidenceWarning({required this.origin, required this.rejected});
+class _LowAccuracyNotice extends StatelessWidget {
+  const _LowAccuracyNotice({required this.origin, required this.rejected});
 
   final ResultOrigin origin;
   final bool rejected;
@@ -1373,8 +1380,9 @@ class _LowConfidenceWarning extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       rejected
-                          ? 'Chami could not identify a clear supported fruit '
-                                'in this image. Try a clearer, centered photo.'
+                          ? 'Chami could not confidently identify the fruit or its ripeness stage. '
+                                'The Grad-CAM view above shows what the model focused on — try '
+                                'uploading a clearer, well-lit photo of one fruit against a plain background.'
                           : origin == ResultOrigin.demo
                           ? 'Chami is showing the tentative demo prediction so '
                                 'you can decide whether to upload a clearer '
@@ -1394,8 +1402,8 @@ class _LowConfidenceWarning extends StatelessWidget {
   }
 }
 
-class _HeatmapExplanation extends StatelessWidget {
-  const _HeatmapExplanation();
+class _GradCamExplanationCard extends StatelessWidget {
+  const _GradCamExplanationCard();
 
   @override
   Widget build(BuildContext context) {
@@ -1406,15 +1414,72 @@ class _HeatmapExplanation extends StatelessWidget {
           'not fruit boundaries or proof of correctness.',
       child: Card(
         margin: EdgeInsets.zero,
-        child: const ListTile(
-          leading: Icon(Icons.visibility_outlined),
-          title: Text('What Chami focused on'),
-          subtitle: Text(
-            'Blue to red regions show what influenced the model. They are not '
-            'fruit boundaries and do not prove the result is correct.',
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.visibility_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'What Chami focused on',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The colored overlay reveals which parts of the image the model '
+                'paid most attention to during analysis. It does NOT identify '
+                'fruit boundaries or confirm the result is correct.',
+              ),
+              const SizedBox(height: 16),
+              _ColorLegendRow(color: Colors.red, label: 'High attention — the model focused here most'),
+              const SizedBox(height: 8),
+              _ColorLegendRow(color: Colors.yellow, label: 'Moderate attention'),
+              const SizedBox(height: 8),
+              _ColorLegendRow(color: Colors.green, label: 'Low attention'),
+              const SizedBox(height: 8),
+              _ColorLegendRow(color: Colors.blue, label: 'Background / ignored area'),
+              const SizedBox(height: 16),
+              const Text(
+                'Tip: For a better result, the fruit should fill most of the frame '
+                'and be well-lit.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ColorLegendRow extends StatelessWidget {
+  const _ColorLegendRow({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label)),
+      ],
     );
   }
 }

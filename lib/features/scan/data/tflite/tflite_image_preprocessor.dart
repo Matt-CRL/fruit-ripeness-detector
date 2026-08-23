@@ -7,6 +7,7 @@ import 'package:kami/features/scan/data/camera/live_camera_frame_converter.dart'
 import 'package:kami/features/scan/data/tflite/image_preprocessing_exception.dart';
 import 'package:kami/features/scan/data/tflite/model_bundle_manifest.dart';
 import 'package:kami/features/scan/domain/ripeness_classifier.dart';
+import 'package:kami/features/scan/domain/scan_models.dart';
 
 export 'image_preprocessing_exception.dart';
 
@@ -14,12 +15,10 @@ final class PreprocessedAssessmentInput {
   const PreprocessedAssessmentInput({
     required this.tensorValues,
     this.isolatedImageBytes,
-    this.gradCamImageBytes,
   });
 
   final Float32List tensorValues;
   final Uint8List? isolatedImageBytes;
-  final Uint8List? gradCamImageBytes;
 }
 
 Float32List prepareU2netInput(Uint8List bytes) {
@@ -150,14 +149,6 @@ PreprocessedAssessmentInput _preprocessRgbImageWithPipeline(
     interpolation: image.Interpolation.linear,
   );
 
-  Uint8List? gradCamJpg;
-  try {
-    final gradCamImage = _generateGradCamHeatmap(resized);
-    gradCamJpg = Uint8List.fromList(image.encodeJpg(gradCamImage, quality: 90));
-  } on Object {
-    // Best-effort image encoding
-  }
-
   final Float32List tensorValues;
   if (contract.isNchw) {
     tensorValues = _normalizeNchw(resized, contract);
@@ -168,7 +159,6 @@ PreprocessedAssessmentInput _preprocessRgbImageWithPipeline(
   return PreprocessedAssessmentInput(
     tensorValues: tensorValues,
     isolatedImageBytes: isolatedJpg,
-    gradCamImageBytes: gradCamJpg,
   );
 }
 
@@ -176,6 +166,10 @@ image.Image _isolateUsingAlphaMask(
   image.Image source,
   List<double> rawMask320,
 ) {
+  if (rawMask320.length != 320 * 320 ||
+      rawMask320.any((value) => !value.isFinite)) {
+    return _letterboxSquare(source);
+  }
   final w = source.width;
   final h = source.height;
 
@@ -270,29 +264,73 @@ image.Image _letterboxSquare(image.Image source) {
   return square;
 }
 
-image.Image _generateGradCamHeatmap(image.Image baseImage) {
+Uint8List? generateGradCamOverlay(
+  Uint8List baseImageBytes,
+  ActivationHeatmap heatmap,
+) {
+  image.Image? baseImage;
+  try {
+    baseImage = image.decodeImage(baseImageBytes);
+  } on Object {
+    return null;
+  }
+  if (baseImage == null) return null;
+
+  final values = heatmap.values;
+  if (values.isEmpty || heatmap.width <= 0 || heatmap.height <= 0) {
+    return null;
+  }
+
+  final minVal = values.reduce(math.min);
+  final maxVal = values.reduce(math.max);
+  final range = maxVal - minVal;
+
   final blended = image.Image(width: baseImage.width, height: baseImage.height);
-  final centerX = baseImage.width / 2.0;
-  final centerY = baseImage.height / 2.0;
-  final sigma = baseImage.width * 0.27; // ~60 on 224
+
+  double sampleHeatmap(double u, double v) {
+    final hx = (u * (heatmap.width - 1)).clamp(0.0, heatmap.width - 1.0);
+    final hy = (v * (heatmap.height - 1)).clamp(0.0, heatmap.height - 1.0);
+    final x0 = hx.floor();
+    final y0 = hy.floor();
+    final x1 = math.min(x0 + 1, heatmap.width - 1);
+    final y1 = math.min(y0 + 1, heatmap.height - 1);
+    final tx = hx - x0;
+    final ty = hy - y0;
+
+    final v00 = heatmap.valueAt(x0, y0);
+    final v10 = heatmap.valueAt(x1, y0);
+    final v01 = heatmap.valueAt(x0, y1);
+    final v11 = heatmap.valueAt(x1, y1);
+
+    final top = v00 * (1 - tx) + v10 * tx;
+    final bottom = v01 * (1 - tx) + v11 * tx;
+    return top * (1 - ty) + bottom * ty;
+  }
 
   for (var y = 0; y < baseImage.height; y++) {
+    final v = baseImage.height == 1 ? 0.0 : y / (baseImage.height - 1);
     for (var x = 0; x < baseImage.width; x++) {
-      final p = baseImage.getPixel(x, y);
-      final dist = math.sqrt(math.pow(x - centerX, 2) + math.pow(y - centerY, 2));
-      final heat = math.exp(-0.5 * math.pow(dist / sigma, 2)).clamp(0.0, 1.0);
+      final u = baseImage.width == 1 ? 0.0 : x / (baseImage.width - 1);
+      final rawVal = sampleHeatmap(u, v);
+      final heat = range <= 0 ? 0.5 : ((rawVal - minVal) / range).clamp(0.0, 1.0);
 
       final jetR = (1.5 - (heat * 4.0 - 1.5).abs()).clamp(0.0, 1.0) * 255.0;
       final jetG = (1.5 - (heat * 4.0 - 2.5).abs()).clamp(0.0, 1.0) * 255.0;
       final jetB = (1.5 - (heat * 4.0 - 0.5).abs()).clamp(0.0, 1.0) * 255.0;
 
+      final p = baseImage.getPixel(x, y);
       final r = (0.6 * p.r + 0.4 * jetR).round().clamp(0, 255);
       final g = (0.6 * p.g + 0.4 * jetG).round().clamp(0, 255);
       final b = (0.6 * p.b + 0.4 * jetB).round().clamp(0, 255);
       blended.setPixelRgb(x, y, r, g, b);
     }
   }
-  return blended;
+
+  try {
+    return Uint8List.fromList(image.encodeJpg(blended, quality: 90));
+  } on Object {
+    return null;
+  }
 }
 
 Float32List _normalizeNchw(image.Image resized, ModelInputContract contract) {

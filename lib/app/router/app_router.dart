@@ -203,7 +203,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.scan,
-        builder: (context, state) => const ScanMethodScreen(),
+        builder: (context, state) => ScanMethodScreen(
+          fromRescan: state.extra == true,
+        ),
       ),
       GoRoute(
         path: AppRoutes.shelfLifePreview,
@@ -215,14 +217,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.scanUpload,
-        builder: (context, state) {
-          final entryMode = state.extra;
-          return ScanScreen(
-            entryMode: entryMode is ScanEntryMode
-                ? entryMode
-                : ScanEntryMode.standard,
-          );
-        },
+        builder: (context, state) => ScanScreen(
+          openedFromRescan: state.extra == true,
+        ),
       ),
       GoRoute(
         path: AppRoutes.scanResult,

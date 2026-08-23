@@ -81,6 +81,9 @@ final class ModelOutputDecoder {
       recognitionStatus: requiresRetake
           ? RecognitionStatus.notRecognizedOrUnclear
           : RecognitionStatus.recognized,
+      // The activation map is explanation-only. Keep it transient and expose
+      // it only for a rejected assessment; accepted and Live Scan results do
+      // not need to carry the map through the rest of the app.
       heatmap: requiresRetake ? heatmap : null,
       isolatedImageBytes: isolatedImageBytes,
       gradCamImageBytes: gradCamImageBytes,

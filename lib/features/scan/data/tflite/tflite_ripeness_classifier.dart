@@ -62,12 +62,34 @@ final class TfliteRipenessClassifier
       );
 
       final output = await session.run(preprocessed.tensorValues);
+      final decoded = _outputDecoder.decode(
+        logits: output.probabilities,
+        manifest: session.manifest,
+        isolatedImageBytes: preprocessed.isolatedImageBytes,
+      );
+      if (!decoded.requiresRetake || output.heatmap == null) {
+        return decoded;
+      }
+
+      Uint8List? gradCamImageBytes;
+      final baseBytes = preprocessed.isolatedImageBytes ?? imageBytes;
+      try {
+        gradCamImageBytes = await Isolate.run(
+          () => generateGradCamOverlay(baseBytes, output.heatmap!),
+          debugName: 'KamiGradCamOverlay',
+        );
+      } on Object catch (e) {
+        if (kDebugMode) {
+          debugPrint('Grad-CAM overlay generation skipped: $e');
+        }
+      }
+
       return _outputDecoder.decode(
         logits: output.probabilities,
         heatmap: output.heatmap,
         manifest: session.manifest,
         isolatedImageBytes: preprocessed.isolatedImageBytes,
-        gradCamImageBytes: preprocessed.gradCamImageBytes,
+        gradCamImageBytes: gradCamImageBytes,
       );
     } on RipenessClassificationException {
       rethrow;
@@ -113,7 +135,6 @@ final class TfliteRipenessClassifier
       final output = await session.run(input);
       return _outputDecoder.decode(
         logits: output.probabilities,
-        heatmap: output.heatmap,
         manifest: session.manifest,
       );
     } on RipenessClassificationException {
@@ -171,28 +192,27 @@ final class TfliteRipenessClassifier
 
       final aux = manifest.auxiliaryModel;
       if (aux != null) {
-        try {
-          final u2Data = await _assetBundle.load(aux.assetPath);
-          final u2Bytes = u2Data.buffer.asUint8List(
-            u2Data.offsetInBytes,
-            u2Data.lengthInBytes,
+        final u2Data = await _assetBundle.load(aux.assetPath);
+        final u2Bytes = u2Data.buffer.asUint8List(
+          u2Data.offsetInBytes,
+          u2Data.lengthInBytes,
+        );
+        final u2Sha256 = await Isolate.run(
+          () => sha256.convert(u2Bytes).toString(),
+          debugName: 'KamiU2netChecksum',
+        );
+        if (u2Sha256 != aux.sha256) {
+          throw const ModelContractException(
+            'The bundled auxiliary model checksum does not match its manifest.',
           );
-          final u2Sha256 = await Isolate.run(
-            () => sha256.convert(u2Bytes).toString(),
-            debugName: 'KamiU2netChecksum',
-          );
-          if (u2Sha256 == aux.sha256) {
-            u2netInterpreter = Interpreter.fromBuffer(u2Bytes);
-            u2netIsolateInterpreter = await IsolateInterpreter.create(
-              address: u2netInterpreter.address,
-              debugName: 'KamiU2netInference',
-            );
-          }
-        } on Object catch (e) {
-          if (kDebugMode) {
-            debugPrint('Could not initialize U2-Net auxiliary model: $e');
-          }
         }
+        final loadedU2net = Interpreter.fromBuffer(u2Bytes);
+        _validateAuxiliaryInterpreter(loadedU2net, aux);
+        u2netInterpreter = loadedU2net;
+        u2netIsolateInterpreter = await IsolateInterpreter.create(
+          address: loadedU2net.address,
+          debugName: 'KamiU2netInference',
+        );
       }
 
       return _TfliteModelSession(
@@ -277,6 +297,29 @@ void _validateInterpreter(
         'The bundled model heatmap tensor does not match its manifest.',
       );
     }
+  }
+}
+
+void _validateAuxiliaryInterpreter(
+  Interpreter interpreter,
+  AuxiliaryModelContract contract,
+) {
+  final inputs = interpreter.getInputTensors();
+  final outputs = interpreter.getOutputTensors();
+  if (inputs.length != 1 || outputs.length != 1) {
+    throw const ModelContractException(
+      'The bundled auxiliary model tensor count does not match its manifest.',
+    );
+  }
+  final input = inputs.single;
+  final output = outputs.single;
+  if (input.type != TensorType.float32 ||
+      !_sameShape(input.shape, contract.inputShape) ||
+      output.type != TensorType.float32 ||
+      !_sameShape(output.shape, contract.outputShape)) {
+    throw const ModelContractException(
+      'The bundled auxiliary model tensors do not match its manifest.',
+    );
   }
 }
 

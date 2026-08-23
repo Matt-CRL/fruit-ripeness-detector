@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:kami/features/scan/data/tflite/model_bundle_manifest.dart';
 import 'package:kami/features/scan/data/tflite/tflite_image_preprocessor.dart';
+import 'package:kami/features/scan/domain/scan_models.dart';
 
 void main() {
   test('center crop removes the outer edges before resizing (NHWC)', () {
@@ -89,6 +90,41 @@ void main() {
       expect(values[2], closeTo(0, 1e-6));
     },
   );
+
+  test('generateGradCamOverlay blends 7x7 activation heatmap onto base image', () {
+    final source = image.Image(width: 14, height: 14);
+    image.fill(source, color: image.ColorRgb8(100, 100, 100));
+    final sourceBytes = Uint8List.fromList(image.encodeJpg(source));
+
+    final heatmap = ActivationHeatmap(
+      width: 7,
+      height: 7,
+      values: List.generate(49, (i) => i.toDouble()),
+    );
+
+    final overlayBytes = generateGradCamOverlay(sourceBytes, heatmap);
+    expect(overlayBytes, isNotNull);
+    expect(overlayBytes!.isNotEmpty, isTrue);
+
+    final decoded = image.decodeImage(overlayBytes);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 14);
+    expect(decoded.height, 14);
+  });
+
+  test('malformed U2-Net masks fall back without crashing preprocessing', () {
+    final source = image.Image(width: 4, height: 2);
+    image.fill(source, color: image.ColorRgb8(80, 120, 160));
+
+    final result = preprocessImageBytes(
+      Uint8List.fromList(image.encodePng(source)),
+      _inputContract(width: 2, height: 2, isNchw: false),
+      u2netAlphaMask: const [double.nan],
+    );
+
+    expect(result.tensorValues, hasLength(12));
+    expect(result.isolatedImageBytes, isNotNull);
+  });
 }
 
 ModelInputContract _inputContract({

@@ -1169,6 +1169,15 @@ void main() {
     expect(find.text('Carabao mango'), findsNothing);
     expect(find.text('Ripe'), findsNothing);
     expect(find.text('42%'), findsNothing);
+    expect(find.text('Isolated'), findsNothing);
+    expect(find.text('Original'), findsOneWidget);
+    expect(find.text('Grad-CAM'), findsOneWidget);
+    expect(find.byKey(const Key('rejected-gradcam-overlay')), findsOneWidget);
+
+    await tester.tap(find.text('Original'));
+    await tester.pump();
+    expect(find.byKey(const Key('rejected-gradcam-overlay')), findsNothing);
+
     expect(find.text('What Chami focused on'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
@@ -1179,6 +1188,19 @@ void main() {
     );
     expect(find.text('Upload a new photo'), findsOneWidget);
     expect(find.text('Save Result'), findsNothing);
+  });
+
+  testWidgets('unrecognized result app bar fits compact phone width', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() async => tester.binding.setSurfaceSize(null));
+
+    final picker = FakeScanImagePicker()..nextSelection = _unrecognizedFixture;
+    await _pumpReturningGuest(tester, imagePicker: picker);
+    await _openUnrecognizedResult(tester);
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('upload preview hides the low-confidence developer sample', (
@@ -1214,7 +1236,7 @@ void main() {
     );
   });
 
-  testWidgets('low-confidence rescan can restore the previous result', (
+  testWidgets('low-confidence rescan stays in the fresh upload flow', (
     WidgetTester tester,
   ) async {
     final picker = FakeScanImagePicker()..nextSelection = _galleryFixture;
@@ -1235,21 +1257,17 @@ void main() {
       find.text('Low confidence - this result may not be accurate'),
       findsOneWidget,
     );
-    expect(find.text('Return to previous result'), findsOneWidget);
+    expect(find.text('Return to previous result'), findsNothing);
+    expect(find.text('Back to selected image'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('Return to previous result'),
-      300,
-    );
-    await tester.tap(find.text('Return to previous result'));
+    await tester.tap(find.text('Back to selected image'));
     await _pumpRoute(tester);
 
-    expect(find.text('Demo preview only'), findsOneWidget);
-    expect(find.text('Carabao mango'), findsOneWidget);
     expect(find.text('Return to previous result'), findsNothing);
+    expect(find.text('Upload one fruit image'), findsOneWidget);
   });
 
-  testWidgets('rescan can return to the unchanged previous result', (
+  testWidgets('rescan opens a fresh upload without a previous-result action', (
     WidgetTester tester,
   ) async {
     final picker = FakeScanImagePicker()..nextSelection = _galleryFixture;
@@ -1261,17 +1279,20 @@ void main() {
     await _pumpRoute(tester);
 
     expect(find.text('Upload one fruit image'), findsOneWidget);
-    expect(find.text('Return to previous result'), findsOneWidget);
-
-    await tester.tap(find.text('Return to previous result'));
-    await _pumpRoute(tester);
-
-    expect(find.textContaining('not a real assessment'), findsOneWidget);
-    expect(find.text('Carabao mango'), findsOneWidget);
     expect(find.text('Return to previous result'), findsNothing);
+    expect(find.byTooltip('Back to scan methods'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to scan methods'));
+    await _pumpRoute(tester);
+    expect(find.text('Choose a scan method'), findsOneWidget);
+    expect(find.byTooltip('Back to home'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to home'));
+    await _pumpRoute(tester);
+    expect(find.text('Ready to check a fruit?'), findsOneWidget);
   });
 
-  testWidgets('Android Back cancels rescan and restores the previous result', (
+  testWidgets('Android Back exits the fresh rescan flow', (
     WidgetTester tester,
   ) async {
     final picker = FakeScanImagePicker()..nextSelection = _galleryFixture;
@@ -1281,13 +1302,12 @@ void main() {
     await tester.scrollUntilVisible(find.text('Rescan'), 300);
     await tester.tap(find.text('Rescan'));
     await _pumpRoute(tester);
-    expect(find.text('Return to previous result'), findsOneWidget);
+    expect(find.text('Return to previous result'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await _pumpRoute(tester);
 
-    expect(find.textContaining('not a real assessment'), findsOneWidget);
-    expect(find.text('Carabao mango'), findsOneWidget);
+    expect(find.text('Choose a scan method'), findsOneWidget);
   });
 
   testWidgets(
@@ -1304,15 +1324,13 @@ void main() {
       await tester.scrollUntilVisible(find.text('Rescan'), 300);
       await tester.tap(find.text('Rescan'));
       await _pumpRoute(tester);
-      await tester.tap(find.text('Return to previous result'));
-      await _pumpRoute(tester);
-      expect(find.textContaining('not a real assessment'), findsOneWidget);
+      expect(find.text('Return to previous result'), findsNothing);
+      expect(find.text('Upload one fruit image'), findsOneWidget);
 
       await tester.binding.handlePopRoute();
       await _pumpRoute(tester);
 
-      expect(find.text('Upload one fruit image'), findsOneWidget);
-      expect(find.text('Return to previous result'), findsNothing);
+      expect(find.text('Choose a scan method'), findsOneWidget);
     },
   );
 
@@ -2948,7 +2966,7 @@ Future<void> _completeRescan(WidgetTester tester) async {
   await tester.scrollUntilVisible(find.text('Rescan'), 300);
   await tester.tap(find.text('Rescan'));
   await _pumpRoute(tester);
-  expect(find.text('Return to previous result'), findsOneWidget);
+  expect(find.text('Return to previous result'), findsNothing);
 
   await tester.tap(find.text('Choose from gallery'));
   await _pumpImagePreview(tester);
