@@ -85,6 +85,8 @@ class _SavedScanDetails extends StatelessWidget {
       brightness: Theme.of(context).brightness,
     );
 
+    final isUserAdjusted = record.modelVersion.contains('adjusted');
+
     return ListView(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -123,11 +125,49 @@ class _SavedScanDetails extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          record.resultOrigin == ResultOrigin.demo
-                              ? 'Saved demo result'
-                              : 'Saved assessment',
-                          style: Theme.of(context).textTheme.labelLarge,
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              record.resultOrigin == ResultOrigin.demo
+                                  ? 'Saved demo result'
+                                  : isUserAdjusted
+                                  ? 'Final assessment'
+                                  : 'Saved assessment',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            if (isUserAdjusted)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.edit_note,
+                                      size: 14,
+                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Adjusted by user',
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -181,6 +221,7 @@ class _SavedScanDetails extends StatelessWidget {
                 ShelfLifeGuidanceCard(
                   estimate: record.shelfLife,
                   ripeness: record.ripeness,
+                  isUserAdjusted: isUserAdjusted,
                 ),
                 const SizedBox(height: 16),
                 Card(
@@ -196,7 +237,15 @@ class _SavedScanDetails extends StatelessWidget {
                         const Divider(height: 24),
                         _DetailRow(
                           label: 'Model version',
-                          value: record.modelVersion,
+                          value: record.modelVersion
+                              .replaceAll(
+                                RegExp(
+                                  r'\s*\(adjusted by user\)',
+                                  caseSensitive: false,
+                                ),
+                                '',
+                              )
+                              .trim(),
                         ),
                         const Divider(height: 24),
                         const _DetailRow(

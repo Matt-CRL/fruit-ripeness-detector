@@ -1307,6 +1307,27 @@ class _HistoryScanCard extends StatelessWidget {
                           label: record.ripeness.displayName,
                           style: stageStyle,
                         ),
+                        if (record.modelVersion.contains('adjusted')) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Adjusted',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Text('$confidence%'),
                       ],

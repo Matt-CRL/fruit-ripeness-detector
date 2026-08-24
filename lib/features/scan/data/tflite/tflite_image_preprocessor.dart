@@ -103,7 +103,7 @@ PreprocessedAssessmentInput preprocessImageBytes(
   );
 }
 
-Float32List preprocessCameraFrame(
+PreprocessedAssessmentInput preprocessCameraFrame(
   LiveCameraFrame frame,
   ModelInputContract contract,
 ) {
@@ -113,7 +113,7 @@ Float32List preprocessCameraFrame(
     contract,
     crop: frame.targetCrop,
   );
-  return input.tensorValues;
+  return input;
 }
 
 PreprocessedAssessmentInput _preprocessRgbImageWithPipeline(

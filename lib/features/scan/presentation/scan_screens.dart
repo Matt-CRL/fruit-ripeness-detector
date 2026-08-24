@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -19,6 +18,7 @@ import 'package:kami/features/scan/presentation/ripeness_stage_style.dart';
 import 'package:kami/features/scan/presentation/scan_image_provider.dart';
 import 'package:kami/features/scan/presentation/model_confidence_indicator.dart';
 import 'package:kami/features/scan/presentation/shelf_life_guidance_card.dart';
+import 'package:kami/features/scan/presentation/grad_cam_view.dart';
 
 enum LowConfidenceAction { uploadNewPhoto }
 
@@ -579,6 +579,8 @@ class ScanResultScreen extends ConsumerStatefulWidget {
 
 class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
   late ScanPreview? _preview = widget.preview;
+  late ClassificationResult? _initialClassification = widget.preview?.classification;
+  RipenessStage? _userOverriddenStage;
   SavedScanRecord? _savedRecord;
   String? _assignedBatchId;
   String? _reservedScanId;
@@ -590,6 +592,8 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.preview != widget.preview) {
       _preview = widget.preview;
+      _initialClassification = widget.preview?.classification;
+      _userOverriddenStage = null;
       _resetSaveState();
     }
   }
@@ -600,6 +604,94 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     _reservedScanId = null;
     _saveError = null;
     _saving = false;
+  }
+
+  Future<void> _openRipenessIntervention() async {
+    final preview = _preview;
+    final initial = _initialClassification;
+    if (preview == null || initial == null || _saving || _savedRecord != null) {
+      return;
+    }
+
+    final selectedStage = await showModalBottomSheet<RipenessStage>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => RipenessInterventionSheet(
+        currentRipeness: preview.classification.ripeness,
+        modelRipeness: initial.ripeness,
+        fruit: initial.fruit,
+        modelConfidence: initial.modelConfidence,
+        onDiscard: _discardScan,
+      ),
+    );
+
+    if (!mounted || selectedStage == null) {
+      return;
+    }
+
+    final advisor = ref.read(shelfLifeAdvisorProvider);
+    if (selectedStage == initial.ripeness) {
+      // Revert to initial AI prediction
+      setState(() {
+        _userOverriddenStage = null;
+        _preview = ScanPreview(
+          image: preview.image,
+          classification: initial,
+          shelfLife: advisor.estimate(initial),
+        );
+      });
+    } else {
+      // Apply user-verified stage
+      final updatedClassification = ClassificationResult(
+        fruit: initial.fruit,
+        ripeness: selectedStage,
+        modelConfidence: initial.modelConfidence,
+        modelVersion: '${initial.modelVersion} (adjusted by user)',
+        origin: initial.origin,
+        requiresRetake: false,
+        recognitionStatus: initial.recognitionStatus,
+        heatmap: initial.heatmap,
+        isolatedImageBytes: initial.isolatedImageBytes,
+        gradCamImageBytes: initial.gradCamImageBytes,
+      );
+      setState(() {
+        _userOverriddenStage = selectedStage;
+        _preview = ScanPreview(
+          image: preview.image,
+          classification: updatedClassification,
+          shelfLife: advisor.estimate(updatedClassification),
+        );
+      });
+    }
+  }
+
+  Future<void> _discardScan() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard this scan?'),
+        content: const Text(
+          'This fruit assessment will be discarded. It will not be saved to History or any batches.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      context.go(AppRoutes.scan);
+    }
   }
 
   void _rescan() {
@@ -702,19 +794,25 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                     imageName: value.image.name,
                     imageProvider: imageProvider,
                     isolatedImageBytes: null,
-                    gradCamImageBytes: null,
-                    heatmap: null,
+                    gradCamImageBytes: classification.gradCamImageBytes,
+                    heatmap: classification.heatmap,
                   ),
                   const SizedBox(height: 16),
                   if (classification.origin == ResultOrigin.demo) ...[
                     const _FakePreviewNotice(),
                     const SizedBox(height: 16),
                   ],
-                  _ResultSummaryCard(classification: classification),
+                  _ResultSummaryCard(
+                    classification: classification,
+                    onVerifyOrChange: _savedRecord == null ? _openRipenessIntervention : null,
+                    isUserVerified: _userOverriddenStage != null,
+                    originalRipeness: _initialClassification?.ripeness,
+                  ),
                   const SizedBox(height: 16),
                   ShelfLifeGuidanceCard(
                     estimate: shelfLife,
                     ripeness: classification.ripeness,
+                    isUserAdjusted: _userOverriddenStage != null,
                   ),
                   const SizedBox(height: 16),
                   if (_saving ||
@@ -742,7 +840,7 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                           : const Icon(Icons.save_outlined),
                       label: Text(_saving ? 'Saving...' : 'Save Result'),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: _rescan,
                       icon: const Icon(Icons.refresh),
@@ -942,7 +1040,7 @@ class _ResultImageCardState extends State<_ResultImageCard> {
                         child: IgnorePointer(
                           child: CustomPaint(
                             key: const Key('rejected-gradcam-overlay'),
-                            painter: _ActivationHeatmapPainter(widget.heatmap!),
+                            painter: ActivationHeatmapPainter(widget.heatmap!),
                           ),
                         ),
                       ),
@@ -980,6 +1078,11 @@ class _ResultImageCardState extends State<_ResultImageCard> {
                 },
               ),
             ),
+            if (_viewMode == _ResultViewMode.gradCam)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: GradCamExplanationCard(),
+              ),
           ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1051,10 +1154,19 @@ class _FakePreviewNotice extends StatelessWidget {
 }
 
 class _ResultSummaryCard extends StatelessWidget {
-  const _ResultSummaryCard({required this.classification, this.eyebrow});
+  const _ResultSummaryCard({
+    required this.classification,
+    this.eyebrow,
+    this.onVerifyOrChange,
+    this.isUserVerified = false,
+    this.originalRipeness,
+  });
 
   final ClassificationResult classification;
   final String? eyebrow;
+  final VoidCallback? onVerifyOrChange;
+  final bool isUserVerified;
+  final RipenessStage? originalRipeness;
 
   @override
   Widget build(BuildContext context) {
@@ -1065,8 +1177,9 @@ class _ResultSummaryCard extends StatelessWidget {
     );
     final confidencePercent = (classification.modelConfidence * 100).round();
     final isDemo = classification.origin == ResultOrigin.demo;
-    final resultEyebrow =
-        eyebrow ?? (isDemo ? 'Demo result' : 'On-device model result');
+    final resultEyebrow = isUserVerified
+        ? 'Final assessment'
+        : (eyebrow ?? (isDemo ? 'Demo result' : 'On-device model result'));
 
     return Semantics(
       container: true,
@@ -1103,7 +1216,46 @@ class _ResultSummaryCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(resultEyebrow, style: theme.textTheme.labelLarge),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              resultEyebrow,
+                              style: theme.textTheme.labelLarge,
+                            ),
+                            if (isUserVerified)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.edit_note,
+                                      size: 14,
+                                      color: theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Adjusted by user',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: theme.colorScheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           classification.ripeness.displayName,
@@ -1137,6 +1289,7 @@ class _ResultSummaryCard extends StatelessWidget {
                   border: Border.all(color: theme.colorScheme.outline),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ModelConfidenceIndicator(
                       confidence: classification.modelConfidence,
@@ -1148,6 +1301,91 @@ class _ResultSummaryCard extends StatelessWidget {
                           ? 'Demo model confidence $confidencePercent percent'
                           : 'Model confidence $confidencePercent percent',
                     ),
+                    if (isUserVerified && originalRipeness != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.psychology_outlined,
+                                  size: 16,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Model result: ${originalRipeness!.displayName} – $confidencePercent% confidence',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 16,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Your correction: ${classification.ripeness.displayName}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 16,
+                                  color: AppColors.brandGreen,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Final assessment: ${classification.ripeness.displayName} – Adjusted by user',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (onVerifyOrChange != null) ...[
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: onVerifyOrChange,
+                        icon: Icon(
+                          isUserVerified ? Icons.edit_outlined : Icons.tune_outlined,
+                          size: 18,
+                        ),
+                        label: Text(
+                          isUserVerified ? 'Change adjustment' : 'Adjust ripeness',
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 12),
@@ -1306,10 +1544,7 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                     origin: value.classification.origin,
                     rejected: rejected,
                   ),
-                  const SizedBox(height: 16),
-                  if (rejected) ...[
-                    const _GradCamExplanationCard(),
-                  ] else ...[
+                  if (!rejected) ...[
                     _ResultSummaryCard(
                       classification: value.classification,
                       eyebrow: value.classification.origin == ResultOrigin.demo
@@ -1318,8 +1553,8 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     const _WithheldShelfLifeNotice(),
+                    const SizedBox(height: 16),
                   ],
-                  const SizedBox(height: 16),
                   const _ClearerPhotoTips(),
                   const SizedBox(height: 24),
                   FilledButton.icon(
@@ -1402,178 +1637,7 @@ class _LowAccuracyNotice extends StatelessWidget {
   }
 }
 
-class _GradCamExplanationCard extends StatelessWidget {
-  const _GradCamExplanationCard();
 
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      label:
-          'Heatmap explanation. Colored regions show what influenced the model, '
-          'not fruit boundaries or proof of correctness.',
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.visibility_outlined, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'What Chami focused on',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The colored overlay reveals which parts of the image the model '
-                'paid most attention to during analysis. It does NOT identify '
-                'fruit boundaries or confirm the result is correct.',
-              ),
-              const SizedBox(height: 16),
-              _ColorLegendRow(color: Colors.red, label: 'High attention — the model focused here most'),
-              const SizedBox(height: 8),
-              _ColorLegendRow(color: Colors.yellow, label: 'Moderate attention'),
-              const SizedBox(height: 8),
-              _ColorLegendRow(color: Colors.green, label: 'Low attention'),
-              const SizedBox(height: 8),
-              _ColorLegendRow(color: Colors.blue, label: 'Background / ignored area'),
-              const SizedBox(height: 16),
-              const Text(
-                'Tip: For a better result, the fruit should fill most of the frame '
-                'and be well-lit.',
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ColorLegendRow extends StatelessWidget {
-  const _ColorLegendRow({required this.color, required this.label});
-
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label)),
-      ],
-    );
-  }
-}
-
-class _ActivationHeatmapPainter extends CustomPainter {
-  const _ActivationHeatmapPainter(this.heatmap);
-
-  // The model exposes a deliberately small 7x7 activation map. Sampling it
-  // on a finer grid with bilinear interpolation keeps the explanation smooth
-  // without changing the model output or pretending it contains pixel-level
-  // fruit boundaries.
-  static const _samplesPerActivationCell = 16;
-
-  final ActivationHeatmap heatmap;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final values = heatmap.values;
-    if (values.isEmpty || heatmap.width <= 0 || heatmap.height <= 0) {
-      return;
-    }
-    final minimum = values.reduce(math.min);
-    final maximum = values.reduce(math.max);
-    final range = maximum - minimum;
-    final renderWidth = heatmap.width * _samplesPerActivationCell;
-    final renderHeight = heatmap.height * _samplesPerActivationCell;
-    final cellWidth = size.width / renderWidth;
-    final cellHeight = size.height / renderHeight;
-    final paint = Paint()..isAntiAlias = false;
-    for (var y = 0; y < renderHeight; y++) {
-      final sourceY = renderHeight == 1 ? 0.0 : y / (renderHeight - 1);
-      for (var x = 0; x < renderWidth; x++) {
-        final sourceX = renderWidth == 1 ? 0.0 : x / (renderWidth - 1);
-        final value = _sampleHeatmap(sourceX, sourceY);
-        final normalized = range <= 0
-            ? 0.5
-            : ((value - minimum) / range).clamp(0.0, 1.0);
-        paint.color = _heatmapColor(normalized).withValues(alpha: 0.5);
-        canvas.drawRect(
-          Rect.fromLTRB(
-            x * cellWidth,
-            y * cellHeight,
-            (x + 1) * cellWidth,
-            (y + 1) * cellHeight,
-          ),
-          paint,
-        );
-      }
-    }
-  }
-
-  double _sampleHeatmap(double x, double y) {
-    final sourceX = x * (heatmap.width - 1);
-    final sourceY = y * (heatmap.height - 1);
-    final x0 = sourceX.floor();
-    final y0 = sourceY.floor();
-    final x1 = math.min(x0 + 1, heatmap.width - 1);
-    final y1 = math.min(y0 + 1, heatmap.height - 1);
-    final xWeight = sourceX - x0;
-    final yWeight = sourceY - y0;
-
-    final top = _lerp(
-      heatmap.valueAt(x0, y0),
-      heatmap.valueAt(x1, y0),
-      xWeight,
-    );
-    final bottom = _lerp(
-      heatmap.valueAt(x0, y1),
-      heatmap.valueAt(x1, y1),
-      xWeight,
-    );
-    return _lerp(top, bottom, yWeight);
-  }
-
-  double _lerp(double start, double end, double amount) =>
-      start + (end - start) * amount;
-
-  @override
-  bool shouldRepaint(covariant _ActivationHeatmapPainter oldDelegate) =>
-      oldDelegate.heatmap != heatmap;
-}
-
-Color _heatmapColor(double value) {
-  const stops = <Color>[
-    Color(0xff1555d1),
-    Color(0xff18a957),
-    Color(0xffffdf00),
-    Color(0xffe53935),
-  ];
-  final scaled = value.clamp(0.0, 1.0) * (stops.length - 1);
-  final lower = scaled.floor();
-  final upper = lower == stops.length - 1 ? lower : lower + 1;
-  return Color.lerp(stops[lower], stops[upper], scaled - lower)!;
-}
 
 class _WithheldShelfLifeNotice extends StatelessWidget {
   const _WithheldShelfLifeNotice();
@@ -1724,6 +1788,224 @@ class _MissingPreviewScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class RipenessInterventionSheet extends StatefulWidget {
+  const RipenessInterventionSheet({
+    required this.currentRipeness,
+    required this.modelRipeness,
+    required this.fruit,
+    required this.modelConfidence,
+    this.onDiscard,
+    super.key,
+  });
+
+  final RipenessStage currentRipeness;
+  final RipenessStage modelRipeness;
+  final FruitIdentifier fruit;
+  final double modelConfidence;
+  final VoidCallback? onDiscard;
+
+  @override
+  State<RipenessInterventionSheet> createState() =>
+      _RipenessInterventionSheetState();
+}
+
+class _RipenessInterventionSheetState
+    extends State<RipenessInterventionSheet> {
+  late RipenessStage _selected = widget.currentRipeness;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final confidencePercent = (widget.modelConfidence * 100).round();
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Adjust Ripeness',
+                  style: theme.textTheme.titleLarge,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The AI model predicted ${widget.modelRipeness.displayName} with $confidencePercent% confidence. '
+              'You can adjust the operational stage below for shelf-life and batches while preserving the original prediction for traceability.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.secondaryText,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...RipenessStage.values.map((stage) {
+              final isSelected = _selected == stage;
+              final isModelPrediction = widget.modelRipeness == stage;
+              final style = ripenessStageStyle(
+                stage,
+                brightness: theme.brightness,
+              );
+
+              String description;
+              switch (stage) {
+                case RipenessStage.unripe:
+                  description =
+                      'Firm texture, mostly green peel, needs more time.';
+                case RipenessStage.ripe:
+                  description =
+                      'Optimal sweetness and aroma, fully colored skin.';
+                case RipenessStage.overripe:
+                  description =
+                      'Soft texture, dark sugar spots, consume immediately.';
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10.0),
+                child: InkWell(
+                  onTap: () => setState(() => _selected = stage),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? style.background
+                          : theme.colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? style.accent
+                            : theme.colorScheme.outlineVariant,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: style.accent,
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(
+                            style.icon,
+                            color: style.foreground,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    stage.displayName,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (isModelPrediction) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: theme
+                                            .colorScheme
+                                            .surfaceContainerHighest,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'AI Pick',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(fontSize: 10),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                description,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: isSelected
+                              ? style.accent
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (_selected != widget.modelRipeness)
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () =>
+                          Navigator.of(context).pop(widget.modelRipeness),
+                      child: const Text('Reset to AI'),
+                    ),
+                  ),
+                if (_selected != widget.modelRipeness)
+                  const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(_selected),
+                    child: const Text('Apply Adjustment'),
+                  ),
+                ),
+              ],
+            ),
+            if (widget.onDiscard != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(
+                    color: theme.colorScheme.error.withValues(alpha: 0.5),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onDiscard!();
+                },
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Discard scan / Not a supported fruit'),
+              ),
+            ],
+          ],
         ),
       ),
     );

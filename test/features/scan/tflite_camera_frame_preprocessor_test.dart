@@ -42,7 +42,7 @@ void main() {
       ],
     );
 
-    final values = preprocessCameraFrame(frame, contract);
+    final values = preprocessCameraFrame(frame, contract).tensorValues;
 
     expect(values, hasLength(12));
     for (var offset = 0; offset < values.length; offset += 3) {
@@ -77,7 +77,7 @@ void main() {
       ],
     );
 
-    final values = preprocessCameraFrame(frame, contract);
+    final values = preprocessCameraFrame(frame, contract).tensorValues;
 
     expect(values, hasLength(12));
     expect(values.every((value) => (value - (128 / 255)).abs() < 1e-6), isTrue);
@@ -114,7 +114,7 @@ void main() {
       ],
     );
 
-    final values = preprocessCameraFrame(frame, contract);
+    final values = preprocessCameraFrame(frame, contract).tensorValues;
 
     expect(values, hasLength(12));
     expect(values[0], closeTo(220 / 255, 1e-6));
@@ -212,9 +212,9 @@ void main() {
       ],
     );
 
-    final values = await Isolate.run(
+    final values = (await Isolate.run(
       () => preprocessCameraFrame(frame, contract),
-    );
+    )).tensorValues;
 
     expect(values, hasLength(12));
   });

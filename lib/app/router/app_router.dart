@@ -70,6 +70,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.resetPassword,
         builder: (context, state) => const ResetPasswordScreen(),
       ),
+      GoRoute(
+        path: '/auth-callback',
+        redirect: (context, state) => AppRoutes.resetPassword,
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return MainShell(navigationShell: navigationShell);

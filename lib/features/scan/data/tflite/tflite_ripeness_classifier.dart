@@ -62,25 +62,19 @@ final class TfliteRipenessClassifier
       );
 
       final output = await session.run(preprocessed.tensorValues);
-      final decoded = _outputDecoder.decode(
-        logits: output.probabilities,
-        manifest: session.manifest,
-        isolatedImageBytes: preprocessed.isolatedImageBytes,
-      );
-      if (!decoded.requiresRetake || output.heatmap == null) {
-        return decoded;
-      }
 
       Uint8List? gradCamImageBytes;
-      final baseBytes = preprocessed.isolatedImageBytes ?? imageBytes;
-      try {
-        gradCamImageBytes = await Isolate.run(
-          () => generateGradCamOverlay(baseBytes, output.heatmap!),
-          debugName: 'KamiGradCamOverlay',
-        );
-      } on Object catch (e) {
-        if (kDebugMode) {
-          debugPrint('Grad-CAM overlay generation skipped: $e');
+      if (output.heatmap != null) {
+        final baseBytes = preprocessed.isolatedImageBytes ?? imageBytes;
+        try {
+          gradCamImageBytes = await Isolate.run(
+            () => generateGradCamOverlay(baseBytes, output.heatmap!),
+            debugName: 'KamiGradCamOverlay',
+          );
+        } on Object catch (e) {
+          if (kDebugMode) {
+            debugPrint('Grad-CAM overlay generation skipped: $e');
+          }
         }
       }
 
@@ -132,9 +126,24 @@ final class TfliteRipenessClassifier
         () => preprocessCameraFrame(frame, inputContract),
         debugName: 'KamiCameraFramePreprocessing',
       );
-      final output = await session.run(input);
+      final output = await session.run(input.tensorValues);
+
+      Uint8List? gradCamImageBytes;
+      if (output.heatmap != null && input.isolatedImageBytes != null) {
+        gradCamImageBytes = await Isolate.run(
+          () => generateGradCamOverlay(
+            input.isolatedImageBytes!,
+            output.heatmap!,
+          ),
+          debugName: 'KamiLiveGradCamOverlay',
+        );
+      }
+
       return _outputDecoder.decode(
         logits: output.probabilities,
+        heatmap: output.heatmap,
+        isolatedImageBytes: input.isolatedImageBytes,
+        gradCamImageBytes: gradCamImageBytes,
         manifest: session.manifest,
       );
     } on RipenessClassificationException {

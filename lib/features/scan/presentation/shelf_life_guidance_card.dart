@@ -5,11 +5,13 @@ class ShelfLifeGuidanceCard extends StatelessWidget {
   const ShelfLifeGuidanceCard({
     required this.estimate,
     required this.ripeness,
+    this.isUserAdjusted = false,
     super.key,
   });
 
   final ShelfLifeEstimate estimate;
   final RipenessStage ripeness;
+  final bool isUserAdjusted;
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +46,14 @@ class ShelfLifeGuidanceCard extends StatelessWidget {
               },
               estimateText: 'approximately $minimum–$maximum $unit',
               storageGuidance: storageGuidance,
+              isUserAdjusted: isUserAdjusted,
             ),
           ShelfLifeConsumeImmediately(:final storageGuidance) =>
             _AvailableGuidance(
               title: 'Consume immediately',
               estimateText: null,
               storageGuidance: storageGuidance,
+              isUserAdjusted: isUserAdjusted,
             ),
         },
       ),
@@ -104,11 +108,13 @@ class _AvailableGuidance extends StatelessWidget {
     required this.title,
     required this.estimateText,
     required this.storageGuidance,
+    this.isUserAdjusted = false,
   });
 
   final String title;
   final String? estimateText;
   final String storageGuidance;
+  final bool isUserAdjusted;
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +125,9 @@ class _AvailableGuidance extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Provisional literature estimate',
+          isUserAdjusted
+              ? 'Provisional estimate (Adjusted by user)'
+              : 'Provisional literature estimate',
           style: theme.textTheme.labelLarge?.copyWith(
             color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.w700,
@@ -200,7 +208,9 @@ class _AvailableGuidance extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                shelfLifeVariabilityDisclaimer,
+                isUserAdjusted
+                    ? 'Recalculated based on user adjustment & literature rules. Actual fruit quality may vary.'
+                    : shelfLifeVariabilityDisclaimer,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: secondaryText,
                 ),
