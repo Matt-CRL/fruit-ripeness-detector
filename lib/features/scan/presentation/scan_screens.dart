@@ -1555,6 +1555,7 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                     const _WithheldShelfLifeNotice(),
                     const SizedBox(height: 16),
                   ],
+                  if (rejected) const SizedBox(height: 16),
                   const _ClearerPhotoTips(),
                   const SizedBox(height: 24),
                   FilledButton.icon(

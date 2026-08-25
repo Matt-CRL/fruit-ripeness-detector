@@ -3,10 +3,18 @@
   "contract_version": "2.0.0",
   "model_metadata": {
     "model_name": "MobileNetV4 Fruit Ripeness & Shelf-Life Classifier (Philippine Fruits)",
-    "iteration": "v5",
+    "iteration": "v6-enhanced",
     "deployment_model_file": "fruit_ripeness_v5_heatmap.tflite",
-    "deployment_model_version": "mobilenetv4-fruit-v5-7ea0a20",
-    "deployment_source_commit": "7ea0a20a1d09645e26d4c3c4116645da4b8b44d0",
+    "deployment_model_version": "mobilenetv4-fruit-v6-enhanced",
+    "deployment_model_sha256": "2d735a3269234d48a233401220de27640daedc8ab56c4209823f1778e2d89d1b",
+    "deployment_source_repository": "https://github.com/javieAlfaro/fruit-ripeness-detector",
+    "deployment_source_commit": "v6-production-build",
+    "deployment_source_commit_status": "Build label; replace with immutable Git commit before thesis or release claims",
+    "previous_deployment": {
+      "model_version": "mobilenetv4-fruit-v5-7ea0a20",
+      "source_commit": "7ea0a20a1d09645e26d4c3c4116645da4b8b44d0",
+      "sha256": "d678cce9a7d3dee3475adfdde14f272f95d21e0ecb6651cd2619ebbb25a5912f3"
+    },
     "backbone": "mobilenetv4_conv_small.e2400_r224_in1k",
     "num_classes": 9,
     "classes": [

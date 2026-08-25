@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -737,29 +736,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ),
-          if (kDebugMode) ...[
-            const SizedBox(height: 24),
-            Text(
-              'Developer preview',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 10),
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.rule_folder_outlined,
-                    color: colorScheme.primary,
-                  ),
-                ),
-                title: const Text('Shelf-life sample previews'),
-                subtitle: const Text('View all nine saved-result examples'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.shelfLifePreview),
-              ),
-            ),
-          ],
         ],
       ),
     );
