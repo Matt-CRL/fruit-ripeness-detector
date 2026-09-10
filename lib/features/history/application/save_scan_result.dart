@@ -7,6 +7,7 @@ import 'package:kami/features/history/data/drift_scan_record_repository.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/scan_record_repository.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
 
@@ -30,6 +31,7 @@ final saveScanResultUseCaseProvider = Provider<SaveScanResultUseCase>((ref) {
               .imageUploadConsent ==
           true;
     },
+    ref.watch(fruitTagSequenceProvider),
   );
 });
 
@@ -40,6 +42,7 @@ final class SaveScanResultUseCase {
     this._utcNow, [
     this._ownerId,
     this._photoConsent,
+    this._fruitTagSequence,
   ]);
 
   final ScanRecordRepository _repository;
@@ -47,10 +50,12 @@ final class SaveScanResultUseCase {
   final UtcNow _utcNow;
   final String? _ownerId;
   final Future<bool> Function()? _photoConsent;
+  final WorkspaceFruitTagSequence? _fruitTagSequence;
 
   Future<SavedScanRecord> execute({
     required ScanPreview preview,
     required String scanId,
+    String? fruitTagId,
   }) async {
     if (preview.classification.requiresRetake) {
       throw const SaveScanResultException(
@@ -63,6 +68,8 @@ final class SaveScanResultUseCase {
       return existing;
     }
 
+    final assignedFruitTagId =
+        fruitTagId ?? await _fruitTagSequence?.reserveNext();
     final retained = await _imageStore.retain(
       sourcePath: preview.image.path,
       scanId: scanId,
@@ -73,6 +80,7 @@ final class SaveScanResultUseCase {
         (await (_photoConsent?.call() ?? Future.value(false)));
     final record = SavedScanRecord(
       id: scanId,
+      fruitTagId: assignedFruitTagId,
       ownerId: _ownerId,
       fruit: preview.classification.fruit,
       ripeness: preview.classification.ripeness,

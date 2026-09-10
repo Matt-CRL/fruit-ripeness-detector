@@ -15,6 +15,7 @@ final class PageCursor {
 final class SavedScanQuery {
   const SavedScanQuery({
     this.fruit,
+    this.fruitTagIdContains,
     this.ripeness,
     this.inBatch,
     this.batchId,
@@ -26,6 +27,7 @@ final class SavedScanQuery {
   });
 
   final FruitIdentifier? fruit;
+  final String? fruitTagIdContains;
   final RipenessStage? ripeness;
   final bool? inBatch;
   final String? batchId;

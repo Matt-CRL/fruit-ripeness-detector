@@ -1,8 +1,19 @@
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/saved_scan_query.dart';
+import 'package:kami/features/scan/domain/scan_models.dart';
 
 abstract interface class ScanRecordRepository {
   Future<void> create(SavedScanRecord record);
+
+  /// Updates the operational ripeness stage and its derived guidance while
+  /// preserving the original fruit/model result and retained image.
+  Future<SavedScanRecord> updateRipeness({
+    required String scanId,
+    required RipenessStage ripeness,
+    required String modelVersion,
+    required ShelfLifeEstimate shelfLife,
+    required DateTime updatedAt,
+  });
 
   Future<SavedScanRecord?> findActiveById(String id);
 

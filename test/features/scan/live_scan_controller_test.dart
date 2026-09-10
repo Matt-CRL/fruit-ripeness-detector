@@ -24,7 +24,7 @@ void main() {
     await _flushAsyncWork();
     expect(classifier.callCount, 0);
 
-    controller.updateTargetCrop(_fullFrameCrop);
+    controller.updateTargetGeometry(_targetGeometry);
     session.emit(_frame);
     await _flushAsyncWork();
     expect(classifier.callCount, 1);
@@ -42,7 +42,7 @@ void main() {
     addTearDown(controller.close);
 
     await controller.initialize();
-    controller.updateTargetCrop(_fullFrameCrop);
+    controller.updateTargetGeometry(_targetGeometry);
     session.emit(_frame);
     session.emit(_frame);
     session.emit(_frame);
@@ -70,7 +70,7 @@ void main() {
       addTearDown(controller.close);
 
       await controller.initialize();
-      controller.updateTargetCrop(_fullFrameCrop);
+      controller.updateTargetGeometry(_targetGeometry);
       session.emit(_frame);
       await _flushAsyncWork();
       expect(controller.result, isNotNull);
@@ -102,22 +102,24 @@ void main() {
       final firstFrame = _frameWithLuminance(64);
       final secondFrame = _frameWithLuminance(192);
       await controller.initialize();
-      controller.updateTargetCrop(_fullFrameCrop);
+      controller.updateTargetGeometry(_targetGeometry);
 
       session.emit(firstFrame);
       classifier.completeNext(_result);
       await _flushAsyncWork();
-      expect(controller.snapshot?.frame, same(firstFrame));
+      expect(controller.snapshot?.frame, isNot(same(firstFrame)));
+      expect(controller.snapshot?.frame.targetCrop, isNotNull);
       expect(controller.snapshot?.classification, same(_result));
 
       session.emit(secondFrame);
       classifier.completeNext(_secondResult);
       await _flushAsyncWork();
-      expect(controller.snapshot?.frame, same(secondFrame));
+      expect(controller.snapshot?.frame, isNot(same(secondFrame)));
+      expect(controller.snapshot?.frame.targetCrop, isNotNull);
       expect(controller.snapshot?.classification, same(_secondResult));
 
       await controller.pause();
-      expect(controller.snapshot?.frame, same(secondFrame));
+      expect(controller.snapshot?.frame.targetCrop, isNotNull);
       expect(controller.snapshot?.classification, same(_secondResult));
     },
   );
@@ -215,7 +217,15 @@ final _frame = LiveCameraFrame(
   ],
 );
 
-const _fullFrameCrop = NormalizedCropRect(left: 0, top: 0, width: 1, height: 1);
+const _targetGeometry = LivePreviewTargetGeometry(
+  viewportWidth: 400,
+  viewportHeight: 800,
+  targetLeft: 100,
+  targetTop: 270,
+  targetWidth: 200,
+  targetHeight: 200,
+  sourceAspectRatio: 0.75,
+);
 
 LiveCameraFrame _frameWithLuminance(int luminance) {
   return LiveCameraFrame(

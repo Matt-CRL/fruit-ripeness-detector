@@ -9,7 +9,9 @@ import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
+import 'package:kami/features/history/presentation/fruit_tag_card.dart';
 import 'package:kami/features/scan/application/scan_service_providers.dart';
 import 'package:kami/features/scan/data/image_picker_scan_image_picker.dart';
 import 'package:kami/features/scan/domain/ripeness_classifier.dart';
@@ -188,10 +190,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   ) async {
     final action = await context.push<LowConfidenceAction>(
       AppRoutes.scanRetake,
-      extra: LowConfidencePreview(
-        image: image,
-        classification: result,
-      ),
+      extra: LowConfidencePreview(image: image, classification: result),
     );
     if (!mounted) {
       return;
@@ -429,10 +428,23 @@ class _SelectedImagePanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                FilledButton.icon(
-                  onPressed: busy || !previewReady ? null : onUse,
-                  icon: const Icon(Icons.arrow_forward),
-                  label: Text(busy ? 'Assessing photo...' : 'Use photo'),
+                Semantics(
+                  container: busy,
+                  liveRegion: busy,
+                  label: busy ? 'Assessing photo' : null,
+                  child: FilledButton.icon(
+                    onPressed: busy || !previewReady ? null : onUse,
+                    icon: busy
+                        ? SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Icon(Icons.arrow_forward),
+                    label: Text(busy ? 'Assessing photo...' : 'Use photo'),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -579,11 +591,13 @@ class ScanResultScreen extends ConsumerStatefulWidget {
 
 class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
   late ScanPreview? _preview = widget.preview;
-  late ClassificationResult? _initialClassification = widget.preview?.classification;
+  late ClassificationResult? _initialClassification =
+      widget.preview?.classification;
   RipenessStage? _userOverriddenStage;
   SavedScanRecord? _savedRecord;
   String? _assignedBatchId;
   String? _reservedScanId;
+  String? _reservedFruitTagId;
   String? _saveError;
   bool _saving = false;
 
@@ -602,6 +616,7 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     _savedRecord = null;
     _assignedBatchId = null;
     _reservedScanId = null;
+    _reservedFruitTagId = null;
     _saveError = null;
     _saving = false;
   }
@@ -654,6 +669,7 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
         heatmap: initial.heatmap,
         isolatedImageBytes: initial.isolatedImageBytes,
         gradCamImageBytes: initial.gradCamImageBytes,
+        isLegacyActivationPreview: initial.isLegacyActivationPreview,
       );
       setState(() {
         _userOverriddenStage = selectedStage;
@@ -730,11 +746,27 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
       _saving = true;
       _saveError = null;
     });
+    String fruitTagId;
+    try {
+      fruitTagId = _reservedFruitTagId ??= await ref
+          .read(fruitTagSequenceProvider)
+          .reserveNext();
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError =
+              'Chami could not reserve a physical-fruit ID. Nothing was '
+              'added to History. Try again.';
+        });
+      }
+      return;
+    }
 
     try {
       final record = await ref
           .read(saveScanResultUseCaseProvider)
-          .execute(preview: preview, scanId: scanId);
+          .execute(preview: preview, scanId: scanId, fruitTagId: fruitTagId);
       if (!mounted) {
         return;
       }
@@ -804,7 +836,9 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                   ],
                   _ResultSummaryCard(
                     classification: classification,
-                    onVerifyOrChange: _savedRecord == null ? _openRipenessIntervention : null,
+                    onVerifyOrChange: _savedRecord == null
+                        ? _openRipenessIntervention
+                        : null,
                     isUserVerified: _userOverriddenStage != null,
                     originalRipeness: _initialClassification?.ripeness,
                   ),
@@ -816,13 +850,23 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                   ),
                   const SizedBox(height: 16),
                   if (_saving ||
-                      _savedRecord != null ||
-                      _saveError != null) ...[
+                      _saveError != null ||
+                      (_savedRecord != null &&
+                          (classification.origin == ResultOrigin.demo ||
+                              _savedRecord!.fruitTagId == null))) ...[
                     _SaveStatusNotice(
                       saving: _saving,
                       saved: _savedRecord != null,
                       errorMessage: _saveError,
                       origin: classification.origin,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_savedRecord != null &&
+                      classification.origin == ResultOrigin.onDeviceModel &&
+                      _savedRecord!.fruitTagId != null) ...[
+                    FruitTagCard.uploadSuggestion(
+                      fruitTagId: _savedRecord!.fruitTagId!,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -964,14 +1008,15 @@ class _ResultImageCardState extends State<_ResultImageCard> {
   void initState() {
     super.initState();
     final hasGradCam =
-        widget.gradCamImageBytes != null || widget.heatmap != null;
+        widget.gradCamImageBytes != null ||
+        (widget.heatmap != null && widget.isolatedImageBytes != null);
     final requestedMode = widget.initialViewMode;
     _viewMode = requestedMode == _ResultViewMode.gradCam && !hasGradCam
         ? _ResultViewMode.original
         : requestedMode ??
-            (widget.isolatedImageBytes != null
-                ? _ResultViewMode.isolated
-                : _ResultViewMode.original);
+              (widget.isolatedImageBytes != null
+                  ? _ResultViewMode.isolated
+                  : _ResultViewMode.original);
   }
 
   @override
@@ -989,11 +1034,14 @@ class _ResultImageCardState extends State<_ResultImageCard> {
       case _ResultViewMode.gradCam:
         activeProvider = widget.gradCamImageBytes != null
             ? MemoryImage(widget.gradCamImageBytes!)
+            : widget.isolatedImageBytes != null
+            ? MemoryImage(widget.isolatedImageBytes!)
             : widget.imageProvider;
     }
 
     final hasGradCam =
-        widget.gradCamImageBytes != null || widget.heatmap != null;
+        widget.gradCamImageBytes != null ||
+        (widget.heatmap != null && widget.isolatedImageBytes != null);
     final hasMultiView = widget.rejected
         ? hasGradCam
         : widget.isolatedImageBytes != null || hasGradCam;
@@ -1035,6 +1083,7 @@ class _ResultImageCardState extends State<_ResultImageCard> {
                     ),
                     if (widget.heatmap != null &&
                         widget.gradCamImageBytes == null &&
+                        widget.isolatedImageBytes != null &&
                         _viewMode == _ResultViewMode.gradCam)
                       Positioned.fill(
                         child: IgnorePointer(
@@ -1241,15 +1290,19 @@ class _ResultSummaryCard extends StatelessWidget {
                                     Icon(
                                       Icons.edit_note,
                                       size: 14,
-                                      color: theme.colorScheme.onPrimaryContainer,
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Adjusted by user',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: theme.colorScheme.onPrimaryContainer,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -1378,11 +1431,15 @@ class _ResultSummaryCard extends StatelessWidget {
                       OutlinedButton.icon(
                         onPressed: onVerifyOrChange,
                         icon: Icon(
-                          isUserVerified ? Icons.edit_outlined : Icons.tune_outlined,
+                          isUserVerified
+                              ? Icons.edit_outlined
+                              : Icons.tune_outlined,
                           size: 18,
                         ),
                         label: Text(
-                          isUserVerified ? 'Change adjustment' : 'Adjust ripeness',
+                          isUserVerified
+                              ? 'Change adjustment'
+                              : 'Adjust ripeness',
                         ),
                       ),
                     ],
@@ -1534,9 +1591,9 @@ class LowConfidenceResultScreen extends ConsumerWidget {
                     heatmap: rejected ? value.classification.heatmap : null,
                     initialViewMode: rejected
                         ? value.classification.gradCamImageBytes != null ||
-                                value.classification.heatmap != null
-                            ? _ResultViewMode.gradCam
-                            : _ResultViewMode.original
+                                  value.classification.heatmap != null
+                              ? _ResultViewMode.gradCam
+                              : _ResultViewMode.original
                         : null,
                   ),
                   const SizedBox(height: 12),
@@ -1637,8 +1694,6 @@ class _LowAccuracyNotice extends StatelessWidget {
     );
   }
 }
-
-
 
 class _WithheldShelfLifeNotice extends StatelessWidget {
   const _WithheldShelfLifeNotice();
@@ -1816,8 +1871,7 @@ class RipenessInterventionSheet extends StatefulWidget {
       _RipenessInterventionSheetState();
 }
 
-class _RipenessInterventionSheetState
-    extends State<RipenessInterventionSheet> {
+class _RipenessInterventionSheetState extends State<RipenessInterventionSheet> {
   late RipenessStage _selected = widget.currentRipeness;
 
   @override
@@ -1837,10 +1891,7 @@ class _RipenessInterventionSheetState
               children: [
                 Icon(Icons.tune_outlined, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
-                Text(
-                  'Adjust Ripeness',
-                  style: theme.textTheme.titleLarge,
-                ),
+                Text('Adjust Ripeness', style: theme.textTheme.titleLarge),
               ],
             ),
             const SizedBox(height: 8),
@@ -1917,9 +1968,8 @@ class _RipenessInterventionSheetState
                                 children: [
                                   Text(
                                     stage.displayName,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold),
                                   ),
                                   if (isModelPrediction) ...[
                                     const SizedBox(width: 8),

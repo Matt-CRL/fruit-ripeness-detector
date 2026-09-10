@@ -60,6 +60,7 @@ final class ClassificationResult {
     this.heatmap,
     this.isolatedImageBytes,
     this.gradCamImageBytes,
+    this.isLegacyActivationPreview = false,
   }) : assert(modelConfidence >= 0 && modelConfidence <= 1);
 
   final FruitIdentifier fruit;
@@ -73,6 +74,11 @@ final class ClassificationResult {
   final ActivationHeatmap? heatmap;
   final Uint8List? isolatedImageBytes;
   final Uint8List? gradCamImageBytes;
+
+  /// True when the image is rendered from the legacy generic activation map.
+  /// It is useful for temporary UI validation, but it is not class-specific
+  /// Grad-CAM and must not be used as model explanation evidence.
+  final bool isLegacyActivationPreview;
 }
 
 sealed class ShelfLifeEstimate {

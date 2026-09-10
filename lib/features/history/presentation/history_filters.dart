@@ -41,10 +41,11 @@ final class HistoryFilters {
       (dateKind == HistoryDateFilterKind.all ? 0 : 1) +
       (sortOrder == HistorySortOrder.newestFirst ? 0 : 1);
 
-  SavedScanQuery toSavedScanQuery({DateTime? now}) {
+  SavedScanQuery toSavedScanQuery({DateTime? now, String? fruitTagIdContains}) {
     final bounds = _dateBounds(now: now);
     return SavedScanQuery(
       fruit: fruit,
+      fruitTagIdContains: fruitTagIdContains,
       ripeness: ripeness,
       inBatch: inBatch,
       createdFromUtc: bounds?.start.toUtc(),

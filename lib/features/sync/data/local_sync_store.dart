@@ -56,16 +56,16 @@ final class LocalSyncStore {
     required int generation,
     String? originalOwnerId,
   }) async {
-    final rows = await (_database.select(
-      _database.detachedEntityOrigins,
-    )..where(
-          (row) =>
-              row.workspaceId.equals(workspaceId) &
-              row.generation.equals(generation) &
-              (originalOwnerId == null
-                  ? const Constant(true)
-                  : row.originalOwnerId.equals(originalOwnerId)),
-        )).get();
+    final rows =
+        await (_database.select(_database.detachedEntityOrigins)..where(
+              (row) =>
+                  row.workspaceId.equals(workspaceId) &
+                  row.generation.equals(generation) &
+                  (originalOwnerId == null
+                      ? const Constant(true)
+                      : row.originalOwnerId.equals(originalOwnerId)),
+            ))
+            .get();
     return [
       for (final row in rows)
         DetachedEntityOrigin(
@@ -296,6 +296,7 @@ final class LocalSyncStore {
                 shelfLifeGuidance: Value(row.shelfLifeGuidance),
                 shelfLifeReason: Value(row.shelfLifeReason),
                 shelfLifeEvidenceVersion: row.shelfLifeEvidenceVersion,
+                fruitTagId: Value(row.fruitTagId),
                 localImageRelativePath: Value(row.localImageRelativePath),
                 remoteImageKey: const Value<String?>(null),
                 createdAt: row.createdAt,
@@ -721,10 +722,29 @@ final class LocalSyncStore {
             remote.revision,
           );
           if (result == LocalApplyResult.ignoredAsDuplicate) return result;
+          final remoteFruitTagId = _optionalString(
+            remote.values,
+            'fruit_tag_id',
+          );
+          if (existing?.fruitTagId != null &&
+              remoteFruitTagId != null &&
+              existing!.fruitTagId != remoteFruitTagId) {
+            await (_database.update(
+              _database.scanRecords,
+            )..where((row) => row.id.equals(remote.id))).write(
+              ScanRecordsCompanion(
+                syncState: Value(
+                  PersistenceCodecs.encodeSyncState(LocalSyncState.failed),
+                ),
+              ),
+            );
+            return LocalApplyResult.replacedPendingConflict;
+          }
           final remoteImageKey = _optionalString(
             remote.values,
             'remote_image_key',
           );
+          final fruitTagId = existing?.fruitTagId ?? remoteFruitTagId;
           final localPath = existing?.localImageRelativePath;
           final imageState = remoteImageKey == null
               ? existing?.imageSyncState ??
@@ -779,6 +799,7 @@ final class LocalSyncStore {
                     remote.values,
                     'shelf_life_evidence_version',
                   ),
+                  fruitTagId: Value(fruitTagId),
                   localImageRelativePath: Value(localPath),
                   remoteImageKey: Value(remoteImageKey),
                   createdAt: _requiredDate(remote.values, 'created_at'),
@@ -1252,6 +1273,7 @@ final class LocalSyncStore {
                 shelfLifeGuidance: Value(scan.shelfLifeGuidance),
                 shelfLifeReason: Value(scan.shelfLifeReason),
                 shelfLifeEvidenceVersion: scan.shelfLifeEvidenceVersion,
+                fruitTagId: Value(scan.fruitTagId),
                 localImageRelativePath: Value(imagePath),
                 remoteImageKey: const Value<String?>(null),
                 createdAt: scan.createdAt,
@@ -1421,6 +1443,7 @@ final class LocalSyncStore {
         'shelf_life_guidance': row.shelfLifeGuidance,
         'shelf_life_reason': row.shelfLifeReason,
         'shelf_life_evidence_version': row.shelfLifeEvidenceVersion,
+        'fruit_tag_id': row.fruitTagId,
         'remote_image_key': row.remoteImageKey,
         'created_at': row.createdAt.toUtc().toIso8601String(),
         'updated_at': row.updatedAt.toUtc().toIso8601String(),

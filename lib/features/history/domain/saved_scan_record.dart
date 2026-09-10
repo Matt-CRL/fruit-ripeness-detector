@@ -1,5 +1,6 @@
 import 'package:kami/core/persistence/local_sync_state.dart';
 import 'package:kami/core/persistence/image_sync_state.dart';
+import 'package:kami/core/persistence/fruit_tag_id.dart';
 import 'package:kami/core/persistence/persistence_validation.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
@@ -15,6 +16,7 @@ final class SavedScanRecord {
     required this.createdAt,
     required this.updatedAt,
     required this.syncState,
+    this.fruitTagId,
     this.remoteRevision = 0,
     this.imageSyncState = ImageSyncState.localOnly,
     this.ownerId,
@@ -24,6 +26,9 @@ final class SavedScanRecord {
     this.deletedAt,
   }) {
     PersistenceValidation.entityId(id, 'id');
+    if (fruitTagId != null && !FruitTagIds.isValid(fruitTagId)) {
+      throw ArgumentError.value(fruitTagId, 'fruitTagId', 'must be a CH ID');
+    }
     PersistenceValidation.optionalEntityId(ownerId, 'ownerId');
     PersistenceValidation.optionalEntityId(batchId, 'batchId');
     if (modelConfidence < 0 || modelConfidence > 1) {
@@ -62,6 +67,7 @@ final class SavedScanRecord {
   }
 
   final String id;
+  final String? fruitTagId;
   final String? ownerId;
   final String? batchId;
   final FruitIdentifier fruit;

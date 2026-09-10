@@ -29,7 +29,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   static const _pageSize = 50;
 
   HistoryFilters _filters = const HistoryFilters();
+  final _fruitTagSearchController = TextEditingController();
   final Set<String> _selectedScanIds = <String>{};
+  String _fruitTagSearch = '';
   List<SavedScanRecord> _records = const [];
   PageCursor? _nextCursor;
   int _totalCount = 0;
@@ -41,6 +43,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   String? _lastRefreshToken;
   int? _lastHistoryRevision;
   bool _refreshQueued = false;
+
+  bool get _hasFruitTagSearch => _fruitTagSearch.isNotEmpty;
+
+  @override
+  void dispose() {
+    _fruitTagSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -68,6 +78,26 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     _reload();
   }
 
+  void _onFruitTagSearchChanged(String value) {
+    final next = value.trim().toUpperCase();
+    if (next == _fruitTagSearch) {
+      return;
+    }
+    setState(() => _fruitTagSearch = next);
+    _reload(showLoading: false);
+  }
+
+  void _clearFruitTagSearch() {
+    if (_fruitTagSearch.isEmpty && _fruitTagSearchController.text.isEmpty) {
+      return;
+    }
+    _fruitTagSearchController.clear();
+    if (_fruitTagSearch.isNotEmpty) {
+      setState(() => _fruitTagSearch = '');
+      _reload(showLoading: false);
+    }
+  }
+
   void _handleHistoryRevision(int revision) {
     if (_lastHistoryRevision == null) {
       _lastHistoryRevision = revision;
@@ -84,6 +114,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   Future<void> _reload({bool showLoading = true}) async {
+    final fruitTagSearch = _fruitTagSearch;
     if (showLoading && mounted) {
       setState(() {
         _isLoading = true;
@@ -93,8 +124,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     try {
       final page = await ref
           .read(scanRecordRepositoryProvider)
-          .fetchPage(query: _filters.toSavedScanQuery(), limit: _pageSize);
-      if (!mounted) return;
+          .fetchPage(
+            query: _filters.toSavedScanQuery(
+              fruitTagIdContains: fruitTagSearch,
+            ),
+            limit: _pageSize,
+          );
+      if (!mounted || fruitTagSearch != _fruitTagSearch) return;
       setState(() {
         _records = page.records;
         _totalCount = page.totalCount;
@@ -117,16 +153,23 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Future<void> _loadMore() async {
     final cursor = _nextCursor;
     if (_isLoadingMore || cursor == null) return;
+    final fruitTagSearch = _fruitTagSearch;
     setState(() => _isLoadingMore = true);
     try {
       final page = await ref
           .read(scanRecordRepositoryProvider)
           .fetchPage(
-            query: _filters.toSavedScanQuery(),
+            query: _filters.toSavedScanQuery(
+              fruitTagIdContains: fruitTagSearch,
+            ),
             cursor: cursor,
             limit: _pageSize,
           );
       if (!mounted) return;
+      if (fruitTagSearch != _fruitTagSearch) {
+        setState(() => _isLoadingMore = false);
+        return;
+      }
       setState(() {
         _records = [..._records, ...page.records];
         _nextCursor = page.nextCursor;
@@ -280,7 +323,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     // Detail screens add a one-shot refresh token when they mutate a record
     // and return to this stateful shell branch. This avoids subscribing the
     // paged screen to the full scan collection just to detect changes.
-    final refreshToken = GoRouterState.of(context).uri.queryParameters['refresh'];
+    final refreshToken = GoRouterState.of(
+      context,
+    ).uri.queryParameters['refresh'];
     if (refreshToken != null && refreshToken != _lastRefreshToken) {
       _lastRefreshToken = refreshToken;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -328,6 +373,25 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         'Saved scans stay available on this device, even when '
                         'you are offline.',
                         style: const TextStyle(color: AppColors.secondaryText),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        key: const Key('history-fruit-id-search'),
+                        controller: _fruitTagSearchController,
+                        onChanged: _onFruitTagSearchChanged,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          labelText: 'Search by Fruit ID',
+                          hintText: 'e.g. CH-000001',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _hasFruitTagSearch
+                              ? IconButton(
+                                  tooltip: 'Clear Fruit ID search',
+                                  onPressed: _clearFruitTagSearch,
+                                  icon: const Icon(Icons.clear),
+                                )
+                              : null,
+                        ),
                       ),
                       if (!_isSelecting) ...[
                         const SizedBox(height: 12),
@@ -410,26 +474,45 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           const SizedBox(height: 12),
                         ],
                         FeatureEmptyStateCard(
-                          icon: _filters.activeCount == 0
+                          icon: _filters.activeCount == 0 && !_hasFruitTagSearch
                               ? Icons.history_outlined
                               : Icons.filter_alt_off_outlined,
-                          title: _filters.activeCount == 0
+                          title:
+                              _filters.activeCount == 0 && !_hasFruitTagSearch
                               ? 'No saved scans yet'
+                              : _hasFruitTagSearch
+                              ? 'No scans match this Fruit ID'
                               : 'No scans match these filters',
-                          message: _filters.activeCount == 0
+                          message:
+                              _filters.activeCount == 0 && !_hasFruitTagSearch
                               ? 'Save a result after choosing a fruit photo '
-                                  'and it will appear here.'
+                                    'and it will appear here.'
+                              : _hasFruitTagSearch
+                              ? 'Try another ID or clear the search to see '
+                                    'all saved scans.'
                               : 'Try adjusting the filters or clear them to '
-                                  'see all saved scans.',
-                          statusLabel: _filters.activeCount == 0
+                                    'see all saved scans.',
+                          statusLabel:
+                              _filters.activeCount == 0 && !_hasFruitTagSearch
                               ? 'Ready offline'
                               : null,
-                          action: _filters.activeCount == 0
+                          action:
+                              _filters.activeCount == 0 && !_hasFruitTagSearch
                               ? null
                               : OutlinedButton.icon(
-                                  onPressed: _clearFilters,
-                                  icon: const Icon(Icons.clear_all),
-                                  label: const Text('Clear filters'),
+                                  onPressed: _hasFruitTagSearch
+                                      ? _clearFruitTagSearch
+                                      : _clearFilters,
+                                  icon: Icon(
+                                    _hasFruitTagSearch
+                                        ? Icons.clear
+                                        : Icons.clear_all,
+                                  ),
+                                  label: Text(
+                                    _hasFruitTagSearch
+                                        ? 'Clear search'
+                                        : 'Clear filters',
+                                  ),
                                 ),
                         ),
                       ],
@@ -437,7 +520,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   ),
                 ),
               )
-            else if (_totalCount == 0 && _filters.activeCount == 0)
+            else if (_totalCount == 0 &&
+                _filters.activeCount == 0 &&
+                !_hasFruitTagSearch)
               SliverToBoxAdapter(
                 child: _historyBounded(
                   context,
@@ -478,14 +563,28 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         const SizedBox(height: 12),
                         FeatureEmptyStateCard(
                           icon: Icons.filter_alt_off_outlined,
-                          title: 'No scans match these filters',
-                          message:
-                              'Try adjusting the filters or clear them to see '
-                              'all saved scans.',
+                          title: _hasFruitTagSearch
+                              ? 'No scans match this Fruit ID'
+                              : 'No scans match these filters',
+                          message: _hasFruitTagSearch
+                              ? 'Try another ID or clear the search to see '
+                                    'all saved scans.'
+                              : 'Try adjusting the filters or clear them to '
+                                    'see all saved scans.',
                           action: OutlinedButton.icon(
-                            onPressed: _clearFilters,
-                            icon: const Icon(Icons.clear_all),
-                            label: const Text('Clear filters'),
+                            onPressed: _hasFruitTagSearch
+                                ? _clearFruitTagSearch
+                                : _clearFilters,
+                            icon: Icon(
+                              _hasFruitTagSearch
+                                  ? Icons.clear
+                                  : Icons.clear_all,
+                            ),
+                            label: Text(
+                              _hasFruitTagSearch
+                                  ? 'Clear search'
+                                  : 'Clear filters',
+                            ),
                           ),
                         ),
                       ],
@@ -500,17 +599,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     context,
                     Padding(
                       padding: EdgeInsets.fromLTRB(
-                        KamiResponsive.value(
-                          context,
-                          regular: 20,
-                          compact: 12,
-                        ),
+                        KamiResponsive.value(context, regular: 20, compact: 12),
                         0,
-                        KamiResponsive.value(
-                          context,
-                          regular: 20,
-                          compact: 12,
-                        ),
+                        KamiResponsive.value(context, regular: 20, compact: 12),
                         12,
                       ),
                       child: _HistoryActiveFilterTags(filters: _filters),
@@ -557,20 +648,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   return _historyBounded(
                     context,
                     Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      KamiResponsive.value(
-                        context,
-                        regular: 20,
-                        compact: 12,
+                      padding: EdgeInsets.fromLTRB(
+                        KamiResponsive.value(context, regular: 20, compact: 12),
+                        0,
+                        KamiResponsive.value(context, regular: 20, compact: 12),
+                        12,
                       ),
-                      0,
-                      KamiResponsive.value(
-                        context,
-                        regular: 20,
-                        compact: 12,
-                      ),
-                      12,
-                    ),
                       child: _HistoryScanCard(
                         record: record,
                         batchName: record.batchId == null
@@ -1062,12 +1145,7 @@ class _HistorySelectionToolbar extends StatelessWidget {
     );
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        horizontalPadding,
-        0,
-        horizontalPadding,
-        12,
-      ),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1288,13 +1366,14 @@ class _HistoryScanCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
-                        Expanded(
-                          child: Text(
-                            record.fruit.displayName,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
+                        Text(
+                          record.fruit.displayName,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                         if (record.resultOrigin == ResultOrigin.demo)
                           const _DemoChip(),
@@ -1315,16 +1394,21 @@ class _HistoryScanCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primaryContainer,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               'Adjusted',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                              ),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer,
+                                  ),
                             ),
                           ),
                         ],
@@ -1333,19 +1417,39 @@ class _HistoryScanCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      formatSavedAt(record.createdAt),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Batch: $batchName',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            record.fruitTagId ?? 'ID unavailable',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Batch: $batchName',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      formatSavedAt(record.createdAt),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.62),
                       ),
                     ),
                   ],

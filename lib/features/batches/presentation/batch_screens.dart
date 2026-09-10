@@ -91,149 +91,131 @@ class _BatchesScreenState extends ConsumerState<BatchesScreen> {
             final activeOrders = ref
                 .watch(activeOrdersProvider)
                 .maybeWhen(data: (orders) => orders, orElse: () => const []);
-                  if (items.isEmpty) {
-                    return [
-                      SliverToBoxAdapter(
-                        child: _batchBounded(
+            if (items.isEmpty) {
+              return [
+                SliverToBoxAdapter(
+                  child: _batchBounded(
+                    context,
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: KamiResponsive.value(
                           context,
-                          Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: KamiResponsive.value(
-                                context,
-                                regular: 20,
-                                compact: 12,
-                              ),
-                            ),
-                            child: FeatureEmptyStateCard(
-                              icon: Icons.inventory_2_outlined,
-                              title: 'No batches yet',
-                              message:
-                                  'Create an empty batch here, or save a scan and '
-                                  'choose Save & Add to Batch.',
-                              statusLabel: 'Ready offline',
-                            ),
-                          ),
+                          regular: 20,
+                          compact: 12,
                         ),
                       ),
-                    ];
-                  }
+                      child: FeatureEmptyStateCard(
+                        icon: Icons.inventory_2_outlined,
+                        title: 'No batches yet',
+                        message:
+                            'Create an empty batch here, or save a scan and '
+                            'choose Save & Add to Batch.',
+                        statusLabel: 'Ready offline',
+                      ),
+                    ),
+                  ),
+                ),
+              ];
+            }
 
-                  final ordersByBatch = {
-                    for (final order in activeOrders) order.batchId: order,
-                  };
-                  final normalizedQuery = _searchQuery.trim().toLowerCase();
-                  final filtered = items
-                      .where((item) {
-                        final nameMatches =
-                            normalizedQuery.isEmpty ||
-                            item.batch.name.toLowerCase().contains(
-                              normalizedQuery,
-                            );
-                        final status = _batchFilterStatus(
-                          item,
-                          ordersByBatch[item.batch.id],
-                        );
-                        final statusMatches =
-                            _selectedStatus == _BatchFilterStatus.all ||
-                            status == _selectedStatus;
-                        return nameMatches && statusMatches;
-                      })
-                      .toList(growable: false);
+            final ordersByBatch = {
+              for (final order in activeOrders) order.batchId: order,
+            };
+            final normalizedQuery = _searchQuery.trim().toLowerCase();
+            final filtered = items
+                .where((item) {
+                  final nameMatches =
+                      normalizedQuery.isEmpty ||
+                      item.batch.name.toLowerCase().contains(normalizedQuery);
+                  final status = _batchFilterStatus(
+                    item,
+                    ordersByBatch[item.batch.id],
+                  );
+                  final statusMatches =
+                      _selectedStatus == _BatchFilterStatus.all ||
+                      status == _selectedStatus;
+                  return nameMatches && statusMatches;
+                })
+                .toList(growable: false);
 
-                  if (filtered.isEmpty) {
-                    return [
-                      SliverToBoxAdapter(
-                        child: _batchBounded(
-                          context,
-                          SizedBox(
-                            width: double.infinity,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: KamiResponsive.value(
-                                  context,
-                                  regular: 20,
-                                  compact: 12,
+            if (filtered.isEmpty) {
+              return [
+                SliverToBoxAdapter(
+                  child: _batchBounded(
+                    context,
+                    SizedBox(
+                      width: double.infinity,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: KamiResponsive.value(
+                            context,
+                            regular: 20,
+                            compact: 12,
+                          ),
+                        ),
+                        child: _BatchFilterEmpty(
+                          query: _searchQuery.trim(),
+                          status: _selectedStatus,
+                          onClearSearch: _searchQuery.trim().isEmpty
+                              ? null
+                              : () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                          onClearStatus:
+                              _selectedStatus == _BatchFilterStatus.all
+                              ? null
+                              : () => setState(
+                                  () =>
+                                      _selectedStatus = _BatchFilterStatus.all,
                                 ),
-                              ),
-                              child: _BatchFilterEmpty(
-                                query: _searchQuery.trim(),
-                                status: _selectedStatus,
-                                onClearSearch: _searchQuery.trim().isEmpty
-                                    ? null
-                                    : () {
-                                        _searchController.clear();
-                                        setState(() => _searchQuery = '');
-                                      },
-                                onClearStatus:
-                                    _selectedStatus == _BatchFilterStatus.all
-                                    ? null
-                                    : () => setState(
-                                        () => _selectedStatus =
-                                            _BatchFilterStatus.all,
-                                      ),
-                              ),
-                            ),
-                          ),
                         ),
                       ),
-                    ];
-                  }
+                    ),
+                  ),
+                ),
+              ];
+            }
 
             return [
-                    SliverToBoxAdapter(
-                      child: _batchBounded(
-                        context,
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            KamiResponsive.value(
-                              context,
-                              regular: 20,
-                              compact: 12,
-                            ),
-                            0,
-                            KamiResponsive.value(
-                              context,
-                              regular: 20,
-                              compact: 12,
-                            ),
-                            12,
-                          ),
-                          child: Text(
-                            '${filtered.length} ${filtered.length == 1 ? 'batch' : 'batches'}',
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                        ),
+              SliverToBoxAdapter(
+                child: _batchBounded(
+                  context,
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      KamiResponsive.value(context, regular: 20, compact: 12),
+                      0,
+                      KamiResponsive.value(context, regular: 20, compact: 12),
+                      12,
+                    ),
+                    child: Text(
+                      '${filtered.length} ${filtered.length == 1 ? 'batch' : 'batches'}',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                ),
+              ),
+              SliverList.builder(
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final item = filtered[index];
+                  return _batchBounded(
+                    context,
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        KamiResponsive.value(context, regular: 20, compact: 12),
+                        0,
+                        KamiResponsive.value(context, regular: 20, compact: 12),
+                        12,
+                      ),
+                      child: _BatchCard(
+                        snapshot: item,
+                        order: ordersByBatch[item.batch.id],
                       ),
                     ),
-                    SliverList.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final item = filtered[index];
-                        return _batchBounded(
-                          context,
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              KamiResponsive.value(
-                                context,
-                                regular: 20,
-                                compact: 12,
-                              ),
-                              0,
-                              KamiResponsive.value(
-                                context,
-                                regular: 20,
-                                compact: 12,
-                              ),
-                              12,
-                            ),
-                            child: _BatchCard(
-                              snapshot: item,
-                              order: ordersByBatch[item.batch.id],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                  );
+                },
+              ),
             ];
           },
         );
@@ -916,7 +898,9 @@ class _AllBatchScans extends ConsumerStatefulWidget {
 class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
   static const _pageSize = 50;
 
+  final _fruitTagSearchController = TextEditingController();
   final _selectedScanIds = <String>{};
+  String _fruitTagSearch = '';
   List<SavedScanRecord> _records = const [];
   PageCursor? _nextCursor;
   int _totalCount = 0;
@@ -926,6 +910,14 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
   bool _selectionMode = false;
   bool _working = false;
   String? _errorMessage;
+
+  bool get _hasFruitTagSearch => _fruitTagSearch.isNotEmpty;
+
+  @override
+  void dispose() {
+    _fruitTagSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -939,6 +931,7 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
     final base = _filters.toSavedScanQuery();
     return SavedScanQuery(
       fruit: base.fruit,
+      fruitTagIdContains: _fruitTagSearch,
       ripeness: base.ripeness,
       batchId: widget.snapshot.batch.id,
       createdFromUtc: base.createdFromUtc,
@@ -948,6 +941,7 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
   }
 
   Future<void> _reload() async {
+    final fruitTagSearch = _fruitTagSearch;
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -956,7 +950,7 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
       final page = await ref
           .read(scanRecordRepositoryProvider)
           .fetchPage(query: _query(), limit: _pageSize);
-      if (!mounted) return;
+      if (!mounted || fruitTagSearch != _fruitTagSearch) return;
       setState(() {
         _records = page.records;
         _totalCount = page.totalCount;
@@ -978,12 +972,17 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
   Future<void> _loadMore() async {
     final cursor = _nextCursor;
     if (_loadingMore || cursor == null) return;
+    final fruitTagSearch = _fruitTagSearch;
     setState(() => _loadingMore = true);
     try {
       final page = await ref
           .read(scanRecordRepositoryProvider)
           .fetchPage(query: _query(), cursor: cursor, limit: _pageSize);
       if (!mounted) return;
+      if (fruitTagSearch != _fruitTagSearch) {
+        setState(() => _loadingMore = false);
+        return;
+      }
       setState(() {
         _records = [..._records, ...page.records];
         _totalCount = page.totalCount;
@@ -1010,6 +1009,26 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
         _errorMessage = null;
       });
       await _reload();
+    }
+  }
+
+  void _onFruitTagSearchChanged(String value) {
+    final next = value.trim().toUpperCase();
+    if (next == _fruitTagSearch) {
+      return;
+    }
+    setState(() => _fruitTagSearch = next);
+    _reload();
+  }
+
+  void _clearFruitTagSearch() {
+    if (_fruitTagSearch.isEmpty && _fruitTagSearchController.text.isEmpty) {
+      return;
+    }
+    _fruitTagSearchController.clear();
+    if (_fruitTagSearch.isNotEmpty) {
+      setState(() => _fruitTagSearch = '');
+      _reload();
     }
   }
 
@@ -1131,6 +1150,7 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
   Widget build(BuildContext context) {
     final snapshot = widget.snapshot;
     final filteredScans = _records;
+    final hasFruitTagSearch = _hasFruitTagSearch;
     final selectedIds = _selectedScanIds.intersection(
       filteredScans.map((scan) => scan.id).toSet(),
     );
@@ -1143,6 +1163,25 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                TextField(
+                  key: const Key('batch-scans-fruit-id-search'),
+                  controller: _fruitTagSearchController,
+                  onChanged: _onFruitTagSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: 'Search by Fruit ID',
+                    hintText: 'e.g. CH-000001',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: hasFruitTagSearch
+                        ? IconButton(
+                            tooltip: 'Clear Fruit ID search',
+                            onPressed: _clearFruitTagSearch,
+                            icon: const Icon(Icons.clear),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -1233,7 +1272,9 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
                     padding: EdgeInsets.all(24),
                     child: Center(child: Text('Loading saved scans...')),
                   )
-                else if (_totalCount == 0 && _filters.activeCount == 0)
+                else if (_totalCount == 0 &&
+                    _filters.activeCount == 0 &&
+                    !hasFruitTagSearch)
                   const FeatureEmptyStateCard(
                     icon: Icons.photo_library_outlined,
                     title: 'No scans in this batch',
@@ -1245,16 +1286,29 @@ class _AllBatchScansState extends ConsumerState<_AllBatchScans> {
                   const SizedBox(height: 12),
                   FeatureEmptyStateCard(
                     icon: Icons.filter_alt_off_outlined,
-                    title: 'No scans match these filters',
-                    message:
-                        'Try adjusting the filters or clear them to see '
-                        'all scans in this batch.',
+                    title: hasFruitTagSearch
+                        ? 'No scans match this Fruit ID'
+                        : 'No scans match these filters',
+                    message: hasFruitTagSearch
+                        ? 'Try another ID or clear the search to see all '
+                              'scans in this batch.'
+                        : 'Try adjusting the filters or clear them to see '
+                              'all scans in this batch.',
                     statusLabel: 'Filtered view',
                     action: OutlinedButton.icon(
-                      onPressed: () =>
-                          setState(() => _filters = const HistoryFilters()),
-                      icon: const Icon(Icons.filter_alt_off_outlined),
-                      label: const Text('Clear filters'),
+                      onPressed: hasFruitTagSearch
+                          ? _clearFruitTagSearch
+                          : () => setState(
+                              () => _filters = const HistoryFilters(),
+                            ),
+                      icon: Icon(
+                        hasFruitTagSearch
+                            ? Icons.clear
+                            : Icons.filter_alt_off_outlined,
+                      ),
+                      label: Text(
+                        hasFruitTagSearch ? 'Clear search' : 'Clear filters',
+                      ),
                     ),
                   ),
                 ] else ...[
@@ -2560,9 +2614,12 @@ class _BatchScanCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        BatchRipenessChip(
-                          label: record.ripeness.displayName,
-                          style: style,
+                        Flexible(
+                          child: Text(
+                            record.fruitTagId ?? 'ID unavailable',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
                         ),
                         const Spacer(),
                         if (record.resultOrigin == ResultOrigin.demo)
@@ -2570,9 +2627,18 @@ class _BatchScanCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
+                    BatchRipenessChip(
+                      label: record.ripeness.displayName,
+                      style: style,
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       formatSavedAt(record.createdAt),
-                      style: const TextStyle(color: AppColors.secondaryText),
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.62),
+                      ),
                     ),
                   ],
                 ),

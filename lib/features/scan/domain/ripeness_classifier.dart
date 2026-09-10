@@ -36,6 +36,44 @@ final class NormalizedCropRect {
       top + height <= 1.0001;
 }
 
+/// The target box as laid out over the covered live-camera preview.
+///
+/// Coordinates are in logical preview pixels. The source aspect ratio is the
+/// oriented aspect ratio used by the preview before its BoxFit.cover scale.
+final class LivePreviewTargetGeometry {
+  const LivePreviewTargetGeometry({
+    required this.viewportWidth,
+    required this.viewportHeight,
+    required this.targetLeft,
+    required this.targetTop,
+    required this.targetWidth,
+    required this.targetHeight,
+    required this.sourceAspectRatio,
+  });
+
+  final double viewportWidth;
+  final double viewportHeight;
+  final double targetLeft;
+  final double targetTop;
+  final double targetWidth;
+  final double targetHeight;
+  final double sourceAspectRatio;
+
+  bool get isValid =>
+      viewportWidth.isFinite &&
+      viewportHeight.isFinite &&
+      targetLeft.isFinite &&
+      targetTop.isFinite &&
+      targetWidth.isFinite &&
+      targetHeight.isFinite &&
+      sourceAspectRatio.isFinite &&
+      viewportWidth > 0 &&
+      viewportHeight > 0 &&
+      targetWidth > 0 &&
+      targetHeight > 0 &&
+      sourceAspectRatio > 0;
+}
+
 enum LiveCameraPixelFormat { yuv420 }
 
 final class LiveCameraPlane {

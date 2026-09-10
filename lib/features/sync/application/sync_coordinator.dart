@@ -7,6 +7,7 @@ import 'package:kami/core/supabase/supabase_client_provider.dart';
 import 'package:kami/features/auth/application/current_owner_provider.dart';
 import 'package:kami/features/history/data/app_private_retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
 import 'package:kami/features/sync/data/supabase_sync_gateway.dart';
 import 'package:kami/features/sync/domain/sync_gateway.dart';
@@ -29,6 +30,7 @@ final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {
     () => ref.read(retainedScanImageStoreProvider),
     ref.watch(authenticatedAccountIdProvider),
     ref.read(syncStatusProvider.notifier),
+    () => ref.read(fruitTagSequenceProvider).reconcileCurrentWorkspace(),
   );
 });
 
@@ -82,6 +84,7 @@ final class SyncCoordinator {
     this._imageResolver,
     this._userId,
     this._status,
+    this._reconcileFruitTags,
   );
 
   final SyncGateway? _gateway;
@@ -89,6 +92,7 @@ final class SyncCoordinator {
   final RetainedScanImageStore Function() _imageResolver;
   final String? _userId;
   final SyncStatusController _status;
+  final Future<void> Function()? _reconcileFruitTags;
 
   LocalSyncStore get _local => _localResolver();
 
@@ -232,6 +236,14 @@ final class SyncCoordinator {
             hasMore = false;
           }
         }
+      }
+
+      try {
+        await _reconcileFruitTags?.call();
+      } on Object {
+        // Sequence reconciliation is metadata backfill. A platform storage
+        // initialization failure must not turn an otherwise successful sync
+        // into a record conflict; the next sync retries the reconciliation.
       }
 
       final pulledSettings = await _local.readSettings(userId);

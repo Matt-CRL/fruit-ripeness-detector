@@ -9,6 +9,7 @@ import 'package:kami/features/history/application/delete_saved_scan.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/presentation/history_providers.dart';
 import 'package:kami/features/history/presentation/history_screen.dart';
+import 'package:kami/features/history/presentation/fruit_tag_card.dart';
 import 'package:kami/features/history/presentation/saved_scan_image.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/orders/presentation/order_providers.dart';
@@ -116,6 +117,13 @@ class _SavedScanDetails extends StatelessWidget {
                   const SizedBox(height: 12),
                   const _SavedDemoNotice(),
                 ],
+                if (record.fruitTagId != null) ...[
+                  const SizedBox(height: 16),
+                  FruitTagCard.savedDetail(
+                    fruitTagId: record.fruitTagId!,
+                    isDemo: record.resultOrigin == ResultOrigin.demo,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Card(
                   color: style.background,
@@ -145,7 +153,9 @@ class _SavedScanDetails extends StatelessWidget {
                                   vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primaryContainer,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
@@ -154,15 +164,22 @@ class _SavedScanDetails extends StatelessWidget {
                                     Icon(
                                       Icons.edit_note,
                                       size: 14,
-                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimaryContainer,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Adjusted by user',
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
                                   ],
                                 ),

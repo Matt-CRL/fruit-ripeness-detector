@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:kami/core/persistence/local_sync_state.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/scan_record_repository.dart';
 import 'package:kami/features/history/domain/saved_scan_query.dart';
+import 'package:kami/features/scan/domain/scan_models.dart';
 
 final class FakeScanRecordRepository implements ScanRecordRepository {
   FakeScanRecordRepository({
@@ -18,7 +20,9 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
   bool failCreates = false;
   bool failReads = false;
   bool failDeletes = false;
+  bool failRipenessUpdates = false;
   int createCalls = 0;
+  int ripenessUpdateCalls = 0;
 
   Future<void> assignToBatch(
     String scanId,
@@ -34,6 +38,7 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
     }
     _records[scanId] = SavedScanRecord(
       id: record.id,
+      fruitTagId: record.fruitTagId,
       ownerId: record.ownerId,
       batchId: batchId,
       fruit: record.fruit,
@@ -88,6 +93,49 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
     }
     _records[record.id] = record;
     _emit();
+  }
+
+  @override
+  Future<SavedScanRecord> updateRipeness({
+    required String scanId,
+    required RipenessStage ripeness,
+    required String modelVersion,
+    required ShelfLifeEstimate shelfLife,
+    required DateTime updatedAt,
+  }) async {
+    ripenessUpdateCalls += 1;
+    if (failRipenessUpdates) {
+      throw StateError('Synthetic ripeness update failure.');
+    }
+    final record = await findActiveById(scanId);
+    if (record == null) {
+      throw StateError('Synthetic scan unavailable.');
+    }
+    final updated = SavedScanRecord(
+      id: record.id,
+      fruitTagId: record.fruitTagId,
+      ownerId: record.ownerId,
+      batchId: record.batchId,
+      fruit: record.fruit,
+      ripeness: ripeness,
+      modelConfidence: record.modelConfidence,
+      modelVersion: modelVersion,
+      resultOrigin: record.resultOrigin,
+      shelfLife: shelfLife,
+      localImageRelativePath: record.localImageRelativePath,
+      remoteImageKey: record.remoteImageKey,
+      createdAt: record.createdAt,
+      updatedAt: updatedAt,
+      deletedAt: record.deletedAt,
+      syncState: record.ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending,
+      remoteRevision: record.remoteRevision,
+      imageSyncState: record.imageSyncState,
+    );
+    _records[scanId] = updated;
+    _emit();
+    return updated;
   }
 
   @override
@@ -278,6 +326,13 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
 
   static bool _matchesQuery(SavedScanRecord record, SavedScanQuery query) {
     if (query.fruit != null && record.fruit != query.fruit) return false;
+    final fruitTagIdContains = query.fruitTagIdContains?.trim().toUpperCase();
+    if (fruitTagIdContains != null && fruitTagIdContains.isNotEmpty) {
+      final fruitTagId = record.fruitTagId?.toUpperCase();
+      if (fruitTagId == null || !fruitTagId.contains(fruitTagIdContains)) {
+        return false;
+      }
+    }
     if (query.ripeness != null && record.ripeness != query.ripeness) {
       return false;
     }
@@ -306,6 +361,7 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
   }) {
     return SavedScanRecord(
       id: record.id,
+      fruitTagId: record.fruitTagId,
       ownerId: record.ownerId,
       batchId: batchId,
       fruit: record.fruit,

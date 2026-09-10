@@ -12,6 +12,7 @@ import 'package:kami/features/orders/data/drift_order_repository.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 import 'package:kami/features/sync/data/local_sync_store.dart';
+import 'package:kami/features/sync/domain/sync_models.dart';
 
 const _ownerId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const _batchId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -121,6 +122,56 @@ void main() {
       PersistenceCodecs.encodeImageSyncState(ImageSyncState.localOnly),
     );
   });
+
+  test('push payload carries the assigned physical-fruit ID', () async {
+    await scans.create(
+      _scan(
+        _scanId,
+        ownerId: _ownerId,
+        fruitTagId: 'CH-000007',
+        syncState: LocalSyncState.pending,
+      ),
+    );
+
+    final pending = await sync.pendingRecords(SyncTable.scanRecords, _ownerId);
+
+    expect(pending.single.values['fruit_tag_id'], 'CH-000007');
+  });
+
+  test(
+    'does not silently replace a conflicting assigned physical-fruit ID',
+    () async {
+      await scans.create(
+        _scan(
+          _scanId,
+          ownerId: _ownerId,
+          fruitTagId: 'CH-000007',
+          syncState: LocalSyncState.synchronized,
+        ),
+      );
+
+      final result = await sync.applyRemote(
+        RemoteSyncRecord(
+          table: SyncTable.scanRecords,
+          id: _scanId,
+          userId: _ownerId,
+          values: const {'fruit_tag_id': 'CH-000008'},
+          revision: 1,
+          serverChangedAt: _now,
+        ),
+      );
+
+      expect(result, LocalApplyResult.replacedPendingConflict);
+      final row = await (database.select(
+        database.scanRecords,
+      )..where((scan) => scan.id.equals(_scanId))).getSingle();
+      expect(row.fruitTagId, 'CH-000007');
+      expect(
+        row.syncState,
+        PersistenceCodecs.encodeSyncState(LocalSyncState.failed),
+      );
+    },
+  );
 
   test('photo consent and sync settings are independent per account', () async {
     await sync.setImageUploadConsent(
@@ -287,9 +338,16 @@ void main() {
   );
 }
 
-SavedScanRecord _scan(String id, {String? batchId, String? ownerId}) {
+SavedScanRecord _scan(
+  String id, {
+  String? batchId,
+  String? ownerId,
+  String? fruitTagId,
+  LocalSyncState syncState = LocalSyncState.localOnly,
+}) {
   return SavedScanRecord(
     id: id,
+    fruitTagId: fruitTagId,
     batchId: batchId,
     fruit: FruitIdentifier.carabaoMango,
     ripeness: RipenessStage.ripe,
@@ -307,6 +365,6 @@ SavedScanRecord _scan(String id, {String? batchId, String? ownerId}) {
     createdAt: _now,
     updatedAt: _now,
     ownerId: ownerId,
-    syncState: LocalSyncState.localOnly,
+    syncState: syncState,
   );
 }

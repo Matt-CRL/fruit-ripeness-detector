@@ -366,10 +366,7 @@ final class _TfliteModelSession {
       1,
       (_) => List.generate(
         1,
-        (_) => List.generate(
-          320,
-          (_) => List<double>.filled(320, 0),
-        ),
+        (_) => List.generate(320, (_) => List<double>.filled(320, 0)),
       ),
     );
     await u2netIsolateInterpreter!.runForMultipleInputs(

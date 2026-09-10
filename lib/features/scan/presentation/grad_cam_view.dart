@@ -1,18 +1,24 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:kami/features/scan/domain/heatmap_color_scale.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
 class GradCamExplanationCard extends StatelessWidget {
-  const GradCamExplanationCard({super.key});
+  const GradCamExplanationCard({this.isLegacyActivationPreview = false, super.key});
+
+  final bool isLegacyActivationPreview;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
-      label:
-          'Heatmap explanation. Colored regions show what influenced the model, '
-          'not fruit boundaries or proof of correctness.',
+      label: isLegacyActivationPreview
+          ? 'Activation preview. This generic map is not class-specific '
+              'Grad-CAM or proof of correctness.'
+          : 'Heatmap explanation. Colored regions show what influenced the model, '
+              'not fruit boundaries or proof of correctness.',
       child: Card(
         margin: EdgeInsets.zero,
         child: Padding(
@@ -30,7 +36,9 @@ class GradCamExplanationCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'How the Grad-CAM Heatmap Works',
+                      isLegacyActivationPreview
+                          ? 'How the Activation Preview Works'
+                          : 'How the Grad-CAM Heatmap Works',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -40,34 +48,39 @@ class GradCamExplanationCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'The colored overlay reveals which areas of the fruit the MobileNetV4 model '
-                'focused on when classifying ripeness. It does NOT define boundaries or prove correctness.',
+                isLegacyActivationPreview
+                    ? 'This temporary preview visualizes the bundled model\'s '
+                        'generic activation map. It is not class-specific '
+                        'Grad-CAM and does NOT prove correctness.'
+                    : 'The colored overlay reveals which areas of the fruit the MobileNetV4 model '
+                        'focused on when classifying ripeness. It does NOT define boundaries or prove correctness.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 14),
               const ColorLegendRow(
-                color: Color(0xffe53935),
-                label: 'High Attention (Red/Orange)',
+                color: Color(0xff00c853),
+                label: 'High Attention (Green)',
                 subtitle:
-                    'Primary cues that determined ripeness (peel color, spots, blemishes).',
+                    'Highest relative activation for this prediction. Check '
+                    'whether it aligns with visible ripeness cues.',
               ),
               const SizedBox(height: 8),
               const ColorLegendRow(
                 color: Color(0xffffdf00),
                 label: 'Moderate Attention (Yellow)',
-                subtitle: 'Secondary supportive visual features.',
+                subtitle: 'Mid-range relative activation in this heatmap.',
               ),
               const SizedBox(height: 8),
               const ColorLegendRow(
-                color: Color(0xff18a957),
-                label: 'Low Attention (Green)',
-                subtitle: 'Surrounding context with minimal influence.',
+                color: Color(0xffe53935),
+                label: 'Low Attention (Red/Orange)',
+                subtitle: 'Lower relative activation in this heatmap.',
               ),
               const SizedBox(height: 8),
               const ColorLegendRow(
                 color: Color(0xff1555d1),
-                label: 'Background / Ignored (Blue)',
-                subtitle: 'Neutral background or irrelevant sections.',
+                label: 'Lowest Attention (Blue)',
+                subtitle: 'Lowest relative activation in this heatmap.',
               ),
             ],
           ),
@@ -110,9 +123,9 @@ class ColorLegendRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               if (subtitle != null)
                 Text(
@@ -151,14 +164,14 @@ class ActivationHeatmapPainter extends CustomPainter {
     final cellHeight = size.height / renderHeight;
     final paint = Paint()..isAntiAlias = false;
     for (var y = 0; y < renderHeight; y++) {
-      final sourceY = renderHeight == 1 ? 0.0 : y / (renderHeight - 1);
       for (var x = 0; x < renderWidth; x++) {
-        final sourceX = renderWidth == 1 ? 0.0 : x / (renderWidth - 1);
-        final value = _sampleHeatmap(sourceX, sourceY);
+        final value = _sampleHeatmap(x, y, renderWidth, renderHeight);
         final normalized = range <= 0
             ? 0.5
             : ((value - minimum) / range).clamp(0.0, 1.0);
-        paint.color = heatmapColor(normalized).withValues(alpha: 0.5);
+        paint.color = heatmapColor(
+          normalized,
+        ).withValues(alpha: heatmapOverlayOpacity);
         canvas.drawRect(
           Rect.fromLTRB(
             x * cellWidth,
@@ -172,9 +185,21 @@ class ActivationHeatmapPainter extends CustomPainter {
     }
   }
 
-  double _sampleHeatmap(double x, double y) {
-    final sourceX = x * (heatmap.width - 1);
-    final sourceY = y * (heatmap.height - 1);
+  double _sampleHeatmap(
+    int outputX,
+    int outputY,
+    int renderWidth,
+    int renderHeight,
+  ) {
+    // Use cell-centered coordinates to match the model export and encoded
+    // overlay path, which follow bilinear interpolation with
+    // align_corners=False.
+    final sourceX = ((outputX + 0.5) * heatmap.width / renderWidth - 0.5).clamp(
+      0.0,
+      heatmap.width - 1.0,
+    );
+    final sourceY = ((outputY + 0.5) * heatmap.height / renderHeight - 0.5)
+        .clamp(0.0, heatmap.height - 1.0);
     final x0 = sourceX.floor();
     final y0 = sourceY.floor();
     final x1 = math.min(x0 + 1, heatmap.width - 1);
@@ -204,16 +229,8 @@ class ActivationHeatmapPainter extends CustomPainter {
 }
 
 Color heatmapColor(double value) {
-  const stops = <Color>[
-    Color(0xff1555d1),
-    Color(0xff18a957),
-    Color(0xffffdf00),
-    Color(0xffe53935),
-  ];
-  final scaled = value.clamp(0.0, 1.0) * (stops.length - 1);
-  final lower = scaled.floor();
-  final upper = lower == stops.length - 1 ? lower : lower + 1;
-  return Color.lerp(stops[lower], stops[upper], scaled - lower)!;
+  final rgb = heatmapRgb(value);
+  return Color.fromARGB(255, rgb.red, rgb.green, rgb.blue);
 }
 
 class LiveGradCamSheet extends StatelessWidget {
@@ -223,6 +240,7 @@ class LiveGradCamSheet extends StatelessWidget {
     required this.ripenessName,
     required this.confidence,
     this.gradCamImageBytes,
+    this.isLegacyActivationPreview = false,
     super.key,
   });
 
@@ -231,6 +249,7 @@ class LiveGradCamSheet extends StatelessWidget {
   final String ripenessName;
   final int confidence;
   final Uint8List? gradCamImageBytes;
+  final bool isLegacyActivationPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -242,13 +261,15 @@ class LiveGradCamSheet extends StatelessWidget {
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          Row(
+              Row(
             children: [
               Icon(Icons.visibility_outlined, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Live AI Attention Heatmap (Grad-CAM)',
+                Expanded(
+                  child: Text(
+                  isLegacyActivationPreview
+                      ? 'Live AI Activation Preview'
+                      : 'Live AI Attention Heatmap (Grad-CAM)',
                   style: theme.textTheme.titleLarge,
                 ),
               ),
@@ -284,7 +305,9 @@ class LiveGradCamSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const GradCamExplanationCard(),
+          GradCamExplanationCard(
+            isLegacyActivationPreview: isLegacyActivationPreview,
+          ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),

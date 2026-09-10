@@ -91,25 +91,45 @@ void main() {
     },
   );
 
-  test('generateGradCamOverlay blends 7x7 activation heatmap onto base image', () {
-    final source = image.Image(width: 14, height: 14);
-    image.fill(source, color: image.ColorRgb8(100, 100, 100));
-    final sourceBytes = Uint8List.fromList(image.encodeJpg(source));
+  test(
+    'generateGradCamOverlay blends 7x7 activation heatmap onto base image',
+    () {
+      final source = image.Image(width: 14, height: 14);
+      image.fill(source, color: image.ColorRgb8(100, 100, 100));
+      final sourceBytes = Uint8List.fromList(image.encodeJpg(source));
 
-    final heatmap = ActivationHeatmap(
-      width: 7,
-      height: 7,
-      values: List.generate(49, (i) => i.toDouble()),
-    );
+      final heatmap = ActivationHeatmap(
+        width: 7,
+        height: 7,
+        values: List.generate(49, (i) => i.toDouble()),
+      );
+
+      final overlayBytes = generateGradCamOverlay(sourceBytes, heatmap);
+      expect(overlayBytes, isNotNull);
+      expect(overlayBytes!.isNotEmpty, isTrue);
+
+      final decoded = image.decodeImage(overlayBytes);
+      expect(decoded, isNotNull);
+      expect(decoded!.width, 14);
+      expect(decoded.height, 14);
+    },
+  );
+
+  test('generateGradCamOverlay renders the maximum activation as green', () {
+    final source = image.Image(width: 40, height: 10);
+    image.fill(source, color: image.ColorRgb8(100, 100, 100));
+    final sourceBytes = Uint8List.fromList(image.encodePng(source));
+    const heatmap = ActivationHeatmap(width: 2, height: 1, values: [0, 1]);
 
     final overlayBytes = generateGradCamOverlay(sourceBytes, heatmap);
-    expect(overlayBytes, isNotNull);
-    expect(overlayBytes!.isNotEmpty, isTrue);
+    final decoded = image.decodeImage(overlayBytes!);
+    final lowest = decoded!.getPixel(0, 5);
+    final highest = decoded.getPixel(39, 5);
 
-    final decoded = image.decodeImage(overlayBytes);
-    expect(decoded, isNotNull);
-    expect(decoded!.width, 14);
-    expect(decoded.height, 14);
+    expect(lowest.b, greaterThan(lowest.r));
+    expect(lowest.b, greaterThan(lowest.g));
+    expect(highest.g, greaterThan(highest.r));
+    expect(highest.g, greaterThan(highest.b));
   });
 
   test('malformed U2-Net masks fall back without crashing preprocessing', () {

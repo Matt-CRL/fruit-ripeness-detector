@@ -103,7 +103,7 @@ class _UnavailableGuidance extends StatelessWidget {
   }
 }
 
-class _AvailableGuidance extends StatelessWidget {
+class _AvailableGuidance extends StatefulWidget {
   const _AvailableGuidance({
     required this.title,
     required this.estimateText,
@@ -117,107 +117,166 @@ class _AvailableGuidance extends StatelessWidget {
   final bool isUserAdjusted;
 
   @override
+  State<_AvailableGuidance> createState() => _AvailableGuidanceState();
+}
+
+class _AvailableGuidanceState extends State<_AvailableGuidance> {
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(covariant _AvailableGuidance oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.title != widget.title ||
+        oldWidget.estimateText != widget.estimateText ||
+        oldWidget.storageGuidance != widget.storageGuidance ||
+        oldWidget.isUserAdjusted != widget.isUserAdjusted) {
+      _expanded = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final secondaryText = theme.colorScheme.onSurfaceVariant;
+    final heading = widget.isUserAdjusted
+        ? 'Provisional estimate (Adjusted by user)'
+        : 'Provisional literature estimate';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          isUserAdjusted
-              ? 'Provisional estimate (Adjusted by user)'
-              : 'Provisional literature estimate',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurface,
-            fontWeight: FontWeight.w700,
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          label: _expanded
+              ? 'Read less about $heading'
+              : 'Read more about $heading',
+          child: InkWell(
+            key: const Key('shelf-life-details-toggle'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      heading,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _expanded ? 'Read less' : 'Read more',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 12),
-        if (estimateText case final value?) ...[
+        if (_expanded) ...[
+          const SizedBox(height: 12),
+          if (widget.estimateText case final value?) ...[
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  key: const Key('shelf-life-time-icon'),
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(widget.title, style: theme.textTheme.labelLarge),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 26),
+              child: Text(value, style: theme.textTheme.bodyLarge),
+            ),
+          ] else
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_outlined,
+                  key: const Key('shelf-life-time-icon'),
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Icon(
-                Icons.schedule_outlined,
-                key: const Key('shelf-life-time-icon'),
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(title, style: theme.textTheme.labelLarge)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 26),
-            child: Text(value, style: theme.textTheme.bodyLarge),
-          ),
-        ] else
-          Row(
-            children: [
-              Icon(
-                Icons.schedule_outlined,
-                key: const Key('shelf-life-time-icon'),
+                Icons.inventory_2_outlined,
+                key: const Key('shelf-life-storage-icon'),
                 size: 18,
                 color: theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                  'Storage guidance',
+                  style: theme.textTheme.labelLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
+            child: Text(widget.storageGuidance),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                key: const Key('shelf-life-disclaimer-icon'),
+                size: 18,
+                color: secondaryText,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.isUserAdjusted
+                      ? 'Recalculated based on user adjustment & literature rules. Actual fruit quality may vary.'
+                      : shelfLifeVariabilityDisclaimer,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: secondaryText,
                   ),
                 ),
               ),
             ],
           ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              key: const Key('shelf-life-storage-icon'),
-              size: 18,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Storage guidance',
-                style: theme.textTheme.labelLarge,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.only(left: 26),
-          child: Text(storageGuidance),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.info_outline_rounded,
-              key: const Key('shelf-life-disclaimer-icon'),
-              size: 18,
-              color: secondaryText,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isUserAdjusted
-                    ? 'Recalculated based on user adjustment & literature rules. Actual fruit quality may vary.'
-                    : shelfLifeVariabilityDisclaimer,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: secondaryText,
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ],
     );
   }

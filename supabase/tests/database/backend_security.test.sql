@@ -1,6 +1,6 @@
 begin;
 
-select plan(29);
+select plan(31);
 
 insert into auth.users (
   id,
@@ -221,6 +221,26 @@ select lives_ok(
     )
   $$,
   'an owner can add a compatible scan'
+);
+
+select lives_ok(
+  $$
+    update public.scan_records
+    set fruit_tag_id = 'CH-000123', updated_at = '2026-08-10T00:00:30Z'
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'a scan can receive its physical-fruit ID once'
+);
+
+select throws_ok(
+  $$
+    update public.scan_records
+    set fruit_tag_id = 'CH-000124', updated_at = '2026-08-10T00:00:45Z'
+    where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  $$,
+  'P0001',
+  'scan_fruit_tag_id_immutable',
+  'an assigned physical-fruit ID cannot be changed'
 );
 
 select lives_ok(

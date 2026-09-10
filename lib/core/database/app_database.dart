@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:kami/core/persistence/fruit_tag_id.dart';
 import 'package:kami/core/persistence/persistence_codecs.dart';
 
 part 'app_database.g.dart';
@@ -85,6 +86,10 @@ class ScanRecords extends Table {
   late final TextColumn shelfLifeGuidance = text().nullable()();
   late final TextColumn shelfLifeReason = text().nullable()();
   late final TextColumn shelfLifeEvidenceVersion = text()();
+  late final TextColumn fruitTagId = text().nullable().withLength(
+    min: 9,
+    max: 32,
+  )();
   late final TextColumn localImageRelativePath = text().nullable()();
   late final TextColumn remoteImageKey = text().nullable()();
   late final DateTimeColumn createdAt = dateTime()();
@@ -135,6 +140,18 @@ class ScanRecords extends Table {
     'CHECK (updated_at >= created_at)',
     'CHECK (deleted_at IS NULL OR deleted_at >= created_at)',
   ];
+}
+
+@DataClassName('WorkspaceSequenceCounterRow')
+class WorkspaceSequenceCounters extends Table {
+  late final TextColumn workspaceKey = text()();
+  late final IntColumn nextValue = integer()
+      .check(nextValue.isBiggerOrEqualValue(1))
+      .withDefault(const Constant(1))();
+  late final DateTimeColumn updatedAt = dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {workspaceKey};
 }
 
 @DataClassName('OrderRow')
@@ -250,6 +267,7 @@ class DetachedEntityOrigins extends Table {
     AccountSyncSettings,
     OfflineWorkspaceStates,
     DetachedEntityOrigins,
+    WorkspaceSequenceCounters,
   ],
 )
 final class AppDatabase extends _$AppDatabase {
@@ -258,7 +276,7 @@ final class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'kami'));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -376,6 +394,41 @@ final class AppDatabase extends _$AppDatabase {
       if (from < 8) {
         await migrator.createTable(offlineWorkspaceStates);
         await migrator.createTable(detachedEntityOrigins);
+      }
+      if (from < 9) {
+        await migrator.createTable(workspaceSequenceCounters);
+
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (tableNames.contains('scan_records')) {
+          await migrator.addColumn(scanRecords, scanRecords.fruitTagId);
+
+          final rows = await customSelect('''
+            SELECT id
+            FROM scan_records
+            WHERE fruit_tag_id IS NULL
+            ORDER BY created_at ASC, id ASC
+            ''').get();
+          var sequence = 1;
+          for (final row in rows) {
+            final id = row.read<String>('id');
+            final escapedId = id.replaceAll("'", "''");
+            await customStatement('''
+              UPDATE scan_records
+              SET fruit_tag_id = '${FruitTagIds.format(sequence)}',
+                  sync_state = CASE
+                    WHEN owner_id IS NULL THEN 'local_only'
+                    ELSE 'pending'
+                  END
+              WHERE id = '$escapedId'
+              ''');
+            sequence++;
+          }
+        }
       }
     },
     beforeOpen: (details) async {

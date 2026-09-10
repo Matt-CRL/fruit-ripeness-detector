@@ -49,7 +49,7 @@ void main() {
   });
 
   test(
-    'schema version eight opens with foreign keys and matches Drift',
+    'schema version nine opens with foreign keys and matches Drift',
     () async {
       final foreignKeys = await database
           .customSelect('PRAGMA foreign_keys')
@@ -58,9 +58,9 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
 
-      expect(database.schemaVersion, 8);
+      expect(database.schemaVersion, 9);
       expect(foreignKeys.data.values.single, 1);
-      expect(userVersion.data.values.single, 8);
+      expect(userVersion.data.values.single, 9);
       await database.validateDatabaseSchema();
     },
   );
@@ -84,6 +84,44 @@ void main() {
       expect((await guestView.listActive()).map((record) => record.id), [
         _scanOneId,
       ]);
+    },
+  );
+
+  test(
+    'saved ripeness adjustment updates guidance and queues account sync',
+    () async {
+      await scans.create(_scan(id: _scanOneId, ownerId: _ownerOneId));
+      final accountView = DriftScanRecordRepository(
+        database,
+        ownerId: _ownerOneId,
+        scopeOwner: true,
+      );
+
+      final updated = await accountView.updateRipeness(
+        scanId: _scanOneId,
+        ripeness: RipenessStage.overripe,
+        modelVersion: 'synthetic-model-v1 (adjusted by user)',
+        shelfLife: const ShelfLifeConsumeImmediately(
+          storageGuidance: 'Consume immediately.',
+          evidenceVersion: 'evidence-v2',
+        ),
+        updatedAt: _updatedAt,
+      );
+
+      expect(updated.ripeness, RipenessStage.overripe);
+      expect(updated.modelVersion, 'synthetic-model-v1 (adjusted by user)');
+      expect(updated.shelfLife, isA<ShelfLifeConsumeImmediately>());
+      expect(updated.updatedAt, _updatedAt);
+
+      final row = await (database.select(
+        database.scanRecords,
+      )..where((table) => table.id.equals(_scanOneId))).getSingle();
+      expect(
+        row.syncState,
+        PersistenceCodecs.encodeSyncState(LocalSyncState.pending),
+      );
+      expect(row.shelfLifeStatus, PersistenceCodecs.shelfLifeAvailable);
+      expect(row.shelfLifeEvidenceVersion, 'evidence-v2');
     },
   );
 
@@ -139,12 +177,13 @@ void main() {
       row.resultOrigin,
       PersistenceCodecs.encodeResultOrigin(ResultOrigin.demo),
     );
+    expect(row.fruitTagId, 'CH-000001');
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .data
           .values
           .single,
-      8,
+      9,
     );
   });
 
@@ -253,7 +292,7 @@ void main() {
           .data
           .values
           .single,
-      8,
+      9,
     );
   });
 
@@ -307,7 +346,7 @@ void main() {
           .data
           .values
           .single,
-      8,
+      9,
     );
   });
 

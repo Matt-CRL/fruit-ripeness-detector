@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,8 @@ import 'package:kami/app/router/app_routes.dart';
 import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
+import 'package:kami/features/history/application/adjust_saved_scan_ripeness.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/scan/application/live_camera.dart';
@@ -29,6 +30,20 @@ class LiveScanScreen extends ConsumerStatefulWidget {
   ConsumerState<LiveScanScreen> createState() => _LiveScanScreenState();
 }
 
+bool _hasUsableAttentionOverlay(ClassificationResult result) {
+  if (result.gradCamImageBytes?.isNotEmpty == true) {
+    return true;
+  }
+
+  final heatmap = result.heatmap;
+  return result.isolatedImageBytes?.isNotEmpty == true &&
+      heatmap != null &&
+      heatmap.width > 0 &&
+      heatmap.height > 0 &&
+      heatmap.values.length == heatmap.width * heatmap.height &&
+      heatmap.values.every((value) => value.isFinite);
+}
+
 class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     with WidgetsBindingObserver {
   static const _appSettingsChannel = MethodChannel(
@@ -39,9 +54,11 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
   SavedScanRecord? _savedRecord;
   String? _assignedBatchId;
   String? _reservedScanId;
+  String? _reservedFruitTagId;
   String? _saveError;
   RipenessStage? _userOverriddenStage;
   bool _saving = false;
+  bool _adjustingRipeness = false;
   bool _retryWhenResumed = false;
 
   @override
@@ -95,14 +112,26 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     _savedRecord = null;
     _assignedBatchId = null;
     _reservedScanId = null;
+    _reservedFruitTagId = null;
     _saveError = null;
     _userOverriddenStage = null;
     _saving = false;
+    _adjustingRipeness = false;
   }
 
   Future<void> _showGradCam() async {
     final snapshot = _controller.snapshot;
     if (snapshot == null) {
+      return;
+    }
+    if (!_hasUsableAttentionOverlay(snapshot.classification)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI attention is unavailable for this model result.'),
+          ),
+        );
+      }
       return;
     }
     if (_controller.phase == LiveScanPhase.active) {
@@ -111,11 +140,12 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     if (!mounted) return;
 
     var gradCamImageBytes = snapshot.classification.gradCamImageBytes;
-    if (gradCamImageBytes == null && snapshot.classification.heatmap != null) {
+    if (gradCamImageBytes == null &&
+        snapshot.classification.heatmap != null &&
+        snapshot.classification.isolatedImageBytes != null) {
       try {
-        final frameJpeg = encodeLiveCameraFrameJpeg(snapshot.frame);
         gradCamImageBytes = generateGradCamOverlay(
-          frameJpeg,
+          snapshot.classification.isolatedImageBytes!,
           snapshot.classification.heatmap!,
         );
       } catch (e) {
@@ -130,19 +160,23 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => LiveGradCamSheet(
-        heatmap: snapshot.classification.heatmap ??
+        heatmap:
+            snapshot.classification.heatmap ??
             const ActivationHeatmap(width: 7, height: 7, values: []),
         gradCamImageBytes: gradCamImageBytes,
         fruitName: snapshot.classification.fruit.displayName,
-        ripenessName: (_userOverriddenStage ?? snapshot.classification.ripeness).displayName,
+        ripenessName: (_userOverriddenStage ?? snapshot.classification.ripeness)
+            .displayName,
         confidence: (snapshot.classification.modelConfidence * 100).round(),
+        isLegacyActivationPreview:
+            snapshot.classification.isLegacyActivationPreview,
       ),
     );
   }
 
   Future<void> _openRipenessIntervention() async {
     final snapshot = _controller.snapshot;
-    if (snapshot == null || _saving || _savedRecord != null) {
+    if (snapshot == null || _saving || _adjustingRipeness) {
       return;
     }
 
@@ -162,7 +196,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
         modelRipeness: snapshot.classification.ripeness,
         fruit: snapshot.classification.fruit,
         modelConfidence: snapshot.classification.modelConfidence,
-        onDiscard: _scanAnotherFruit,
+        onDiscard: _savedRecord == null ? _scanAnotherFruit : null,
       ),
     );
 
@@ -170,13 +204,63 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
       return;
     }
 
-    setState(() {
-      if (selectedStage == snapshot.classification.ripeness) {
-        _userOverriddenStage = null;
-      } else {
-        _userOverriddenStage = selectedStage;
+    final modelRipeness = snapshot.classification.ripeness;
+    final isAdjusted = selectedStage != modelRipeness;
+    final baseModelVersion = snapshot.classification.modelVersion
+        .replaceAll(
+          RegExp(r'\s*\(adjusted by user\)', caseSensitive: false),
+          '',
+        )
+        .trim();
+    final modelVersion = isAdjusted
+        ? '$baseModelVersion (adjusted by user)'
+        : baseModelVersion;
+    final classification = ClassificationResult(
+      fruit: snapshot.classification.fruit,
+      ripeness: selectedStage,
+      modelConfidence: snapshot.classification.modelConfidence,
+      modelVersion: modelVersion,
+      origin: snapshot.classification.origin,
+      requiresRetake: false,
+      recognitionStatus: snapshot.classification.recognitionStatus,
+      heatmap: snapshot.classification.heatmap,
+      isolatedImageBytes: snapshot.classification.isolatedImageBytes,
+      gradCamImageBytes: snapshot.classification.gradCamImageBytes,
+      isLegacyActivationPreview:
+          snapshot.classification.isLegacyActivationPreview,
+    );
+
+    final savedRecord = _savedRecord;
+    if (savedRecord != null) {
+      setState(() => _adjustingRipeness = true);
+      try {
+        final updatedRecord = await ref
+            .read(adjustSavedScanRipenessUseCaseProvider)
+            .execute(
+              scanId: savedRecord.id,
+              ripeness: selectedStage,
+              modelVersion: modelVersion,
+              shelfLife: ref
+                  .read(shelfLifeAdvisorProvider)
+                  .estimate(classification),
+            );
+        if (!mounted) return;
+        setState(() {
+          _savedRecord = updatedRecord;
+          _userOverriddenStage = isAdjusted ? selectedStage : null;
+          _adjustingRipeness = false;
+        });
+      } on SavedScanRipenessAdjustmentException catch (error) {
+        if (!mounted) return;
+        setState(() => _adjustingRipeness = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
-    });
+      return;
+    }
+
+    setState(() => _userOverriddenStage = isAdjusted ? selectedStage : null);
   }
 
   Future<void> _saveResult() async {
@@ -198,6 +282,22 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
       _saving = true;
       _saveError = null;
     });
+    String fruitTagId;
+    try {
+      fruitTagId = _reservedFruitTagId ??= await ref
+          .read(fruitTagSequenceProvider)
+          .reserveNext();
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError =
+              'Chami could not reserve a physical-fruit ID. Nothing was '
+              'added to History. Keep the result paused and try again.';
+        });
+      }
+      return;
+    }
 
     SelectedScanImage? temporaryImage;
     SavedScanRecord? savedRecord;
@@ -206,7 +306,9 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
       if (_controller.phase != LiveScanPhase.paused) {
         throw StateError('Live Scan could not pause before saving.');
       }
-      temporaryImage = await frameStore.writeTemporary(snapshot.frame);
+      temporaryImage = await frameStore.writeTemporaryTargetCrop(
+        snapshot.frame,
+      );
       final classificationToSave = _userOverriddenStage != null
           ? ClassificationResult(
               fruit: snapshot.classification.fruit,
@@ -220,6 +322,8 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
               heatmap: snapshot.classification.heatmap,
               isolatedImageBytes: snapshot.classification.isolatedImageBytes,
               gradCamImageBytes: snapshot.classification.gradCamImageBytes,
+              isLegacyActivationPreview:
+                  snapshot.classification.isLegacyActivationPreview,
             )
           : snapshot.classification;
 
@@ -230,6 +334,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
           shelfLife: shelfLifeAdvisor.estimate(classificationToSave),
         ),
         scanId: scanId,
+        fruitTagId: fruitTagId,
       );
     } on Object {
       if (mounted) {
@@ -329,6 +434,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
         LiveScanPhase.active || LiveScanPhase.paused => _LiveCameraBody(
           controller: _controller,
           saving: _saving,
+          adjustingRipeness: _adjustingRipeness,
           savedRecord: _savedRecord,
           assignedBatchId: _assignedBatchId,
           saveError: _saveError,
@@ -380,6 +486,7 @@ class _LiveCameraBody extends StatefulWidget {
   const _LiveCameraBody({
     required this.controller,
     required this.saving,
+    required this.adjustingRipeness,
     required this.savedRecord,
     required this.assignedBatchId,
     required this.saveError,
@@ -397,6 +504,7 @@ class _LiveCameraBody extends StatefulWidget {
 
   final LiveScanController controller;
   final bool saving;
+  final bool adjustingRipeness;
   final SavedScanRecord? savedRecord;
   final String? assignedBatchId;
   final String? saveError;
@@ -435,11 +543,11 @@ class _LiveCameraBodyState extends State<_LiveCameraBody> {
     _cropUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cropUpdateScheduled = false;
-      _updateTargetCrop();
+      _updateTargetGeometry();
     });
   }
 
-  void _updateTargetCrop() {
+  void _updateTargetGeometry() {
     final session = widget.controller.session;
     final previewContext = _previewKey.currentContext;
     final targetContext = _targetKey.currentContext;
@@ -470,30 +578,17 @@ class _LiveCameraBodyState extends State<_LiveCameraBody> {
         MediaQuery.orientationOf(context) == Orientation.portrait
         ? 1 / cameraRatio
         : cameraRatio;
-    final previewSize = previewBox.size;
-    final sourceWidth = displayRatio * 1000;
-    const sourceHeight = 1000.0;
-    final scale = math.max(
-      previewSize.width / sourceWidth,
-      previewSize.height / sourceHeight,
+    widget.controller.updateTargetGeometry(
+      LivePreviewTargetGeometry(
+        viewportWidth: previewBox.size.width,
+        viewportHeight: previewBox.size.height,
+        targetLeft: target.left,
+        targetTop: target.top,
+        targetWidth: target.width,
+        targetHeight: target.height,
+        sourceAspectRatio: displayRatio,
+      ),
     );
-    final scaledWidth = sourceWidth * scale;
-    final scaledHeight = sourceHeight * scale;
-    final offsetX = (previewSize.width - scaledWidth) / 2;
-    final offsetY = (previewSize.height - scaledHeight) / 2;
-    final left = ((target.left - offsetX) / scaledWidth).clamp(0.0, 1.0);
-    final top = ((target.top - offsetY) / scaledHeight).clamp(0.0, 1.0);
-    final right = ((target.right - offsetX) / scaledWidth).clamp(0.0, 1.0);
-    final bottom = ((target.bottom - offsetY) / scaledHeight).clamp(0.0, 1.0);
-    final crop = NormalizedCropRect(
-      left: left,
-      top: top,
-      width: right - left,
-      height: bottom - top,
-    );
-    if (crop.isValid) {
-      widget.controller.updateTargetCrop(crop);
-    }
   }
 
   @override
@@ -553,6 +648,7 @@ class _LiveCameraBodyState extends State<_LiveCameraBody> {
                 child: _LiveResultPanel(
                   controller: widget.controller,
                   saving: widget.saving,
+                  adjustingRipeness: widget.adjustingRipeness,
                   savedRecord: widget.savedRecord,
                   assignedBatchId: widget.assignedBatchId,
                   saveError: widget.saveError,
@@ -661,6 +757,7 @@ class _LiveResultPanel extends StatelessWidget {
   const _LiveResultPanel({
     required this.controller,
     required this.saving,
+    required this.adjustingRipeness,
     required this.savedRecord,
     required this.assignedBatchId,
     required this.saveError,
@@ -678,6 +775,7 @@ class _LiveResultPanel extends StatelessWidget {
 
   final LiveScanController controller;
   final bool saving;
+  final bool adjustingRipeness;
   final SavedScanRecord? savedRecord;
   final String? assignedBatchId;
   final String? saveError;
@@ -699,6 +797,7 @@ class _LiveResultPanel extends StatelessWidget {
     final rejected =
         result?.recognitionStatus == RecognitionStatus.notRecognizedOrUnclear ||
         result?.requiresRetake == true;
+    final canViewGradCam = result != null && _hasUsableAttentionOverlay(result);
     final paused = controller.phase == LiveScanPhase.paused;
     final saved = savedRecord != null;
     return Material(
@@ -742,8 +841,12 @@ class _LiveResultPanel extends StatelessWidget {
                 _LiveClassification(
                   result: result,
                   userOverriddenStage: userOverriddenStage,
-                  onVerifyOrChange: !saved ? onVerifyOrChange : null,
-                  onViewGradCam: (!saved && paused) ? onViewGradCam : null,
+                  onVerifyOrChange: !saved && !saving && !adjustingRipeness
+                      ? onVerifyOrChange
+                      : null,
+                  onViewGradCam: paused && !saving && canViewGradCam
+                      ? onViewGradCam
+                      : null,
                 ),
               if (savedRecord case final record?) ...[
                 const SizedBox(height: 10),
@@ -783,12 +886,16 @@ class _LiveResultPanel extends StatelessWidget {
                         : const Icon(Icons.save_outlined),
                     label: Text(saving ? 'Saving...' : 'Save Result'),
                   ),
-                  if (paused && onViewGradCam != null) ...[
+                  if (paused && onViewGradCam != null && canViewGradCam) ...[
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: onViewGradCam,
                       icon: const Icon(Icons.visibility_outlined),
-                      label: const Text('View AI Heatmap (Grad-CAM)'),
+                      label: Text(
+                        result.isLegacyActivationPreview
+                            ? 'View AI Activation Preview'
+                            : 'View AI Heatmap (Grad-CAM)',
+                      ),
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -820,6 +927,21 @@ class _LiveResultPanel extends StatelessWidget {
                   ),
                   label: Text(
                     assignedBatchId == null ? 'Add to Batch' : 'View batch',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: saving || adjustingRipeness
+                      ? null
+                      : onVerifyOrChange,
+                  icon: adjustingRipeness
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.tune_outlined),
+                  label: Text(
+                    adjustingRipeness ? 'Adjusting...' : 'Adjust ripeness',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -882,9 +1004,9 @@ class _LiveClassification extends StatelessWidget {
                 children: [
                   Text(
                     '${activeRipeness.displayName} ${result.fruit.displayName}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   if (isVerified)
                     Container(
@@ -902,15 +1024,20 @@ class _LiveClassification extends StatelessWidget {
                           Icon(
                             Icons.edit_note,
                             size: 14,
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Adjusted by user',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                         ],
                       ),
@@ -933,7 +1060,9 @@ class _LiveClassification extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton.outlined(
             onPressed: onViewGradCam,
-            tooltip: 'View AI Attention Heatmap (Grad-CAM)',
+            tooltip: result.isLegacyActivationPreview
+                ? 'View AI Activation Preview'
+                : 'View AI Attention Heatmap (Grad-CAM)',
             icon: const Icon(Icons.visibility_outlined, size: 20),
           ),
         ],

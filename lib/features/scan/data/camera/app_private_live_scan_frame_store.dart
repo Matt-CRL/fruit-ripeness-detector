@@ -33,15 +33,48 @@ final class AppPrivateLiveScanFrameStore implements LiveScanFrameStore {
 
   @override
   Future<SelectedScanImage> writeTemporary(LiveCameraFrame frame) async {
-    File? pending;
     try {
       final bytes = await Isolate.run(
         () => encodeLiveCameraFrameJpeg(frame),
         debugName: 'KamiLiveFrameJpegEncoding',
       );
+      return _writeBytes(bytes);
+    } on LiveScanFrameStoreException {
+      rethrow;
+    } on Object catch (error) {
+      throw LiveScanFrameStoreException(
+        'Chami could not prepare the live result image for saving.',
+        error,
+      );
+    }
+  }
+
+  @override
+  Future<SelectedScanImage> writeTemporaryTargetCrop(
+    LiveCameraFrame frame,
+  ) async {
+    try {
+      final bytes = await Isolate.run(
+        () => encodeLiveCameraTargetCropJpeg(frame),
+        debugName: 'KamiLiveTargetCropJpegEncoding',
+      );
+      return _writeBytes(bytes);
+    } on LiveScanFrameStoreException {
+      rethrow;
+    } on Object catch (error) {
+      throw LiveScanFrameStoreException(
+        'Chami could not prepare the live result image for saving.',
+        error,
+      );
+    }
+  }
+
+  Future<SelectedScanImage> _writeBytes(Uint8List bytes) async {
+    File? pending;
+    try {
       if (bytes.isEmpty) {
         throw const LiveScanFrameStoreException(
-          'The live camera frame could not be encoded.',
+          'The live result image could not be encoded.',
         );
       }
 
@@ -90,4 +123,60 @@ Uint8List encodeLiveCameraFrameJpeg(LiveCameraFrame frame) {
     converted,
     quality: AppPrivateLiveScanFrameStore.jpegQuality,
   );
+}
+
+Uint8List encodeLiveCameraTargetCropJpeg(LiveCameraFrame frame) {
+  final crop = frame.targetCrop;
+  if (crop == null || !crop.isValid) {
+    throw const LiveScanFrameStoreException(
+      'The live target crop was unavailable. Please scan again.',
+    );
+  }
+  final converted = convertLiveCameraFrameToImage(frame);
+  final target = _cropToSquare(
+    converted,
+    crop,
+    expansion: 1.10,
+  );
+  return image.encodeJpg(
+    target,
+    quality: AppPrivateLiveScanFrameStore.jpegQuality,
+  );
+}
+
+image.Image _cropToSquare(
+  image.Image source,
+  NormalizedCropRect crop, {
+  required double expansion,
+}) {
+  final left = (crop.left * source.width).round();
+  final top = (crop.top * source.height).round();
+  final right = ((crop.left + crop.width) * source.width).round();
+  final bottom = ((crop.top + crop.height) * source.height).round();
+  final centerX = (left + right) / 2;
+  final centerY = (top + bottom) / 2;
+  final baseSide = (right - left > bottom - top ? right - left : bottom - top)
+      .clamp(1, source.width)
+      .toInt()
+      .clamp(1, source.height)
+      .toInt();
+  final requestedSide = (baseSide * expansion).round();
+  final side = requestedSide
+      .clamp(1, source.width)
+      .toInt()
+      .clamp(1, source.height)
+      .toInt();
+  final startX = _boundedCropStart(centerX, side, source.width);
+  final startY = _boundedCropStart(centerY, side, source.height);
+  return image.copyCrop(
+    source,
+    x: startX,
+    y: startY,
+    width: side,
+    height: side,
+  );
+}
+
+int _boundedCropStart(double center, int side, int extent) {
+  return (center - side / 2).round().clamp(0, extent - side).toInt();
 }

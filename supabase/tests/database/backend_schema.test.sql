@@ -1,6 +1,6 @@
 begin;
 
-select plan(24);
+select plan(25);
 
 select has_table('public', 'batches', 'batches table exists');
 select has_table('public', 'scan_records', 'scan_records table exists');
@@ -23,6 +23,12 @@ select has_column(
   'scan_records',
   'remote_image_key',
   'scan rows carry private object keys'
+);
+select has_column(
+  'public',
+  'scan_records',
+  'fruit_tag_id',
+  'scan rows carry nullable physical-fruit IDs'
 );
 select has_column('public', 'orders', 'deleted_at', 'orders use tombstones');
 select has_column(

@@ -17,6 +17,17 @@ provide account sign-in, synchronization, and private photo backup.
 - Guest mode with local scans, History, batches, and orders
 - Upload Image and Live Scan workflows
 - Clear assessment result with ripeness and shelf-life guidance
+- Available shelf-life guidance starts collapsed behind **Read more** and
+  expands with **Read less**, without showing a summary in the collapsed state
+- Human ripeness adjustment before or after saving, with the adjusted stage
+  persisted to History and used for shelf-life guidance
+- Permanent workspace-scoped physical-fruit IDs (`CH-000001`), with IDs
+  allocated to Upload, Live, and Demo saves
+- Upload-only label suggestion and sticker-style Fruit ID card; Live and Demo
+  save surfaces remain unchanged
+- History and Batch Details partial Fruit ID search, with clearable empty states
+- History cards and Batch Details previews organized around Fruit ID and
+  fruit/ripeness metadata
 - History filters, sorting, paging, and scan deletion rules
 - Batches with same-fruit scan assignment, removal, and moving
 - Local order details, pending/completed status, and completed-order protection
@@ -106,6 +117,37 @@ permission from the model owner before making this repository public or
 redistributing its APK/model assets. If permission is not confirmed, keep the
 repository private and share only an authorized test APK.
 
+The active v6 `heatmap_map` output is the shipped legacy channel-average
+activation map. Upload and Live Scan render it through the existing Grad-CAM
+viewer with green as the highest relative activation and the same model-input
+crop used for inference. It remains a visual activation preview rather than a
+validated predicted-class Grad-CAM. The corrected export notebook is preserved
+at `../experiments/chami_verified_gradcam_export.ipynb` for a future, separately
+validated replacement; it is not bundled in the active app.
+
+## Physical-fruit IDs and label guidance
+
+Every successful Upload, Live, and Demo save receives a permanent
+workspace-scoped ID such as `CH-000001`. The counter is shared across fruit
+types, never reuses a value, survives deletion and workspace transitions, and
+continues past six digits. Reservation happens transactionally before image
+retention; an interrupted reservation may leave a gap.
+
+Only a successful real Upload save shows the **Suggested next step / Label this
+fruit** card. Its short instruction is **Write this ID on a tag and attach it to
+the fruit.** The sticker-style panel contains the Chami wordmark, **FRUIT ID**,
+the code, a dashed tear line, and outlined semicircle punch holes. It has no
+**Saved offline** row, **Copy ID** action, verification disclaimer, barcode, QR
+code, printing action, or marked-as-labeled state. Chami cannot verify that a
+user attached a physical label, so the tag is a suggested user action rather
+than an enforced identity link.
+
+Saved details show **Fruit ID** for real records and **Demo record ID** for Demo
+records. History cards show fruit type, ripeness/confidence, batch and Fruit ID,
+then a muted date/time. Batch Details previews show Fruit ID, ripeness, then
+date/time. General free-text search and reusable-fruit association are not part
+of this version.
+
 ## Project layout
 
 ```text
@@ -125,6 +167,10 @@ sessions can be upgraded safely. The user-facing application name is Chami.
 
 - Online behavior still requires hosted Supabase validation across multiple
   devices.
+- Independently offline workspaces can issue the same sequential Fruit ID; the
+  first version assumes one device per user and does not coordinate counters
+  over the network.
+- The app does not verify that a physical tag was attached to the fruit.
 - Release signing currently uses the development/debug key and is not suitable
   for production Play Store distribution.
 - Shelf-life guidance is provisional decision support, not a food-safety

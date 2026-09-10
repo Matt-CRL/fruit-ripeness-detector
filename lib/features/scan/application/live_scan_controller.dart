@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:kami/features/scan/application/live_camera.dart';
+import 'package:kami/features/scan/application/live_scan_crop_geometry.dart';
 import 'package:kami/features/scan/domain/ripeness_classifier.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
@@ -43,7 +44,7 @@ final class LiveScanController extends ChangeNotifier {
   int _generation = 0;
   String? _failureMessage;
   LiveCameraFailureKind? _failureKind;
-  NormalizedCropRect? _targetCrop;
+  LivePreviewTargetGeometry? _targetGeometry;
 
   LiveCameraSession? get session => _session;
   LiveScanPhase get phase => _phase;
@@ -52,21 +53,24 @@ final class LiveScanController extends ChangeNotifier {
   bool get isAnalyzing => _inferenceInFlight;
   String? get failureMessage => _failureMessage;
   LiveCameraFailureKind? get failureKind => _failureKind;
-  NormalizedCropRect? get targetCrop => _targetCrop;
+  LivePreviewTargetGeometry? get targetGeometry => _targetGeometry;
 
-  void updateTargetCrop(NormalizedCropRect crop) {
-    if (_closed || !crop.isValid) {
+  void updateTargetGeometry(LivePreviewTargetGeometry geometry) {
+    if (_closed || !geometry.isValid) {
       return;
     }
-    final current = _targetCrop;
+    final current = _targetGeometry;
     if (current != null &&
-        current.left == crop.left &&
-        current.top == crop.top &&
-        current.width == crop.width &&
-        current.height == crop.height) {
+        current.viewportWidth == geometry.viewportWidth &&
+        current.viewportHeight == geometry.viewportHeight &&
+        current.targetLeft == geometry.targetLeft &&
+        current.targetTop == geometry.targetTop &&
+        current.targetWidth == geometry.targetWidth &&
+        current.targetHeight == geometry.targetHeight &&
+        current.sourceAspectRatio == geometry.sourceAspectRatio) {
       return;
     }
-    _targetCrop = crop;
+    _targetGeometry = geometry;
     _notify();
   }
 
@@ -81,7 +85,7 @@ final class LiveScanController extends ChangeNotifier {
     _failureKind = null;
     _inferenceInFlight = false;
     _lastInferenceStarted = null;
-    _targetCrop = null;
+    _targetGeometry = null;
     _notify();
     await _disposeSession();
     if (!_isCurrent(generation)) {
@@ -181,7 +185,7 @@ final class LiveScanController extends ChangeNotifier {
         _inferenceInFlight) {
       return false;
     }
-    if (_targetCrop == null) {
+    if (_targetGeometry == null) {
       return false;
     }
     final lastStarted = _lastInferenceStarted;
@@ -193,18 +197,25 @@ final class LiveScanController extends ChangeNotifier {
     if (!_shouldAcceptFrame(generation)) {
       return;
     }
-    final targetCrop = _targetCrop;
-    if (targetCrop == null) {
+    final targetGeometry = _targetGeometry;
+    if (targetGeometry == null) {
       return;
     }
     _inferenceInFlight = true;
     _lastInferenceStarted = _clock.elapsed;
     _notify();
     try {
+      final targetCrop = resolveLiveTargetCrop(
+        frame: frame,
+        geometry: targetGeometry,
+      );
       final classifiedFrame = frame.copyWith(targetCrop: targetCrop);
       final result = await _classifier.classifyFrame(classifiedFrame);
       if (_isCurrent(generation) && _phase == LiveScanPhase.active) {
-        _snapshot = LiveScanSnapshot(frame: frame, classification: result);
+        _snapshot = LiveScanSnapshot(
+          frame: classifiedFrame,
+          classification: result,
+        );
       }
     } on RipenessClassificationException catch (error) {
       await _fail(

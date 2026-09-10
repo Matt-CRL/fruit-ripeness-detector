@@ -756,6 +756,21 @@ class $ScanRecordsTable extends ScanRecords
         type: DriftSqlType.string,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _fruitTagIdMeta = const VerificationMeta(
+    'fruitTagId',
+  );
+  @override
+  late final GeneratedColumn<String> fruitTagId = GeneratedColumn<String>(
+    'fruit_tag_id',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 9,
+      maxTextLength: 32,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _localImageRelativePathMeta =
       const VerificationMeta('localImageRelativePath');
   @override
@@ -867,6 +882,7 @@ class $ScanRecordsTable extends ScanRecords
     shelfLifeGuidance,
     shelfLifeReason,
     shelfLifeEvidenceVersion,
+    fruitTagId,
     localImageRelativePath,
     remoteImageKey,
     createdAt,
@@ -1022,6 +1038,15 @@ class $ScanRecordsTable extends ScanRecords
     } else if (isInserting) {
       context.missing(_shelfLifeEvidenceVersionMeta);
     }
+    if (data.containsKey('fruit_tag_id')) {
+      context.handle(
+        _fruitTagIdMeta,
+        fruitTagId.isAcceptableOrUnknown(
+          data['fruit_tag_id']!,
+          _fruitTagIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('local_image_relative_path')) {
       context.handle(
         _localImageRelativePathMeta,
@@ -1155,6 +1180,10 @@ class $ScanRecordsTable extends ScanRecords
         DriftSqlType.string,
         data['${effectivePrefix}shelf_life_evidence_version'],
       )!,
+      fruitTagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fruit_tag_id'],
+      ),
       localImageRelativePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}local_image_relative_path'],
@@ -1212,6 +1241,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
   final String? shelfLifeGuidance;
   final String? shelfLifeReason;
   final String shelfLifeEvidenceVersion;
+  final String? fruitTagId;
   final String? localImageRelativePath;
   final String? remoteImageKey;
   final DateTime createdAt;
@@ -1236,6 +1266,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     this.shelfLifeGuidance,
     this.shelfLifeReason,
     required this.shelfLifeEvidenceVersion,
+    this.fruitTagId,
     this.localImageRelativePath,
     this.remoteImageKey,
     required this.createdAt,
@@ -1279,6 +1310,9 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     map['shelf_life_evidence_version'] = Variable<String>(
       shelfLifeEvidenceVersion,
     );
+    if (!nullToAbsent || fruitTagId != null) {
+      map['fruit_tag_id'] = Variable<String>(fruitTagId);
+    }
     if (!nullToAbsent || localImageRelativePath != null) {
       map['local_image_relative_path'] = Variable<String>(
         localImageRelativePath,
@@ -1329,6 +1363,9 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           ? const Value.absent()
           : Value(shelfLifeReason),
       shelfLifeEvidenceVersion: Value(shelfLifeEvidenceVersion),
+      fruitTagId: fruitTagId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fruitTagId),
       localImageRelativePath: localImageRelativePath == null && nullToAbsent
           ? const Value.absent()
           : Value(localImageRelativePath),
@@ -1371,6 +1408,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       shelfLifeEvidenceVersion: serializer.fromJson<String>(
         json['shelfLifeEvidenceVersion'],
       ),
+      fruitTagId: serializer.fromJson<String?>(json['fruitTagId']),
       localImageRelativePath: serializer.fromJson<String?>(
         json['localImageRelativePath'],
       ),
@@ -1404,6 +1442,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       'shelfLifeEvidenceVersion': serializer.toJson<String>(
         shelfLifeEvidenceVersion,
       ),
+      'fruitTagId': serializer.toJson<String?>(fruitTagId),
       'localImageRelativePath': serializer.toJson<String?>(
         localImageRelativePath,
       ),
@@ -1433,6 +1472,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     Value<String?> shelfLifeGuidance = const Value.absent(),
     Value<String?> shelfLifeReason = const Value.absent(),
     String? shelfLifeEvidenceVersion,
+    Value<String?> fruitTagId = const Value.absent(),
     Value<String?> localImageRelativePath = const Value.absent(),
     Value<String?> remoteImageKey = const Value.absent(),
     DateTime? createdAt,
@@ -1468,6 +1508,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
         : this.shelfLifeReason,
     shelfLifeEvidenceVersion:
         shelfLifeEvidenceVersion ?? this.shelfLifeEvidenceVersion,
+    fruitTagId: fruitTagId.present ? fruitTagId.value : this.fruitTagId,
     localImageRelativePath: localImageRelativePath.present
         ? localImageRelativePath.value
         : this.localImageRelativePath,
@@ -1520,6 +1561,9 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       shelfLifeEvidenceVersion: data.shelfLifeEvidenceVersion.present
           ? data.shelfLifeEvidenceVersion.value
           : this.shelfLifeEvidenceVersion,
+      fruitTagId: data.fruitTagId.present
+          ? data.fruitTagId.value
+          : this.fruitTagId,
       localImageRelativePath: data.localImageRelativePath.present
           ? data.localImageRelativePath.value
           : this.localImageRelativePath,
@@ -1557,6 +1601,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           ..write('shelfLifeGuidance: $shelfLifeGuidance, ')
           ..write('shelfLifeReason: $shelfLifeReason, ')
           ..write('shelfLifeEvidenceVersion: $shelfLifeEvidenceVersion, ')
+          ..write('fruitTagId: $fruitTagId, ')
           ..write('localImageRelativePath: $localImageRelativePath, ')
           ..write('remoteImageKey: $remoteImageKey, ')
           ..write('createdAt: $createdAt, ')
@@ -1586,6 +1631,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     shelfLifeGuidance,
     shelfLifeReason,
     shelfLifeEvidenceVersion,
+    fruitTagId,
     localImageRelativePath,
     remoteImageKey,
     createdAt,
@@ -1614,6 +1660,7 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           other.shelfLifeGuidance == this.shelfLifeGuidance &&
           other.shelfLifeReason == this.shelfLifeReason &&
           other.shelfLifeEvidenceVersion == this.shelfLifeEvidenceVersion &&
+          other.fruitTagId == this.fruitTagId &&
           other.localImageRelativePath == this.localImageRelativePath &&
           other.remoteImageKey == this.remoteImageKey &&
           other.createdAt == this.createdAt &&
@@ -1640,6 +1687,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
   final Value<String?> shelfLifeGuidance;
   final Value<String?> shelfLifeReason;
   final Value<String> shelfLifeEvidenceVersion;
+  final Value<String?> fruitTagId;
   final Value<String?> localImageRelativePath;
   final Value<String?> remoteImageKey;
   final Value<DateTime> createdAt;
@@ -1665,6 +1713,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     this.shelfLifeGuidance = const Value.absent(),
     this.shelfLifeReason = const Value.absent(),
     this.shelfLifeEvidenceVersion = const Value.absent(),
+    this.fruitTagId = const Value.absent(),
     this.localImageRelativePath = const Value.absent(),
     this.remoteImageKey = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1691,6 +1740,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     this.shelfLifeGuidance = const Value.absent(),
     this.shelfLifeReason = const Value.absent(),
     required String shelfLifeEvidenceVersion,
+    this.fruitTagId = const Value.absent(),
     this.localImageRelativePath = const Value.absent(),
     this.remoteImageKey = const Value.absent(),
     required DateTime createdAt,
@@ -1725,6 +1775,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Expression<String>? shelfLifeGuidance,
     Expression<String>? shelfLifeReason,
     Expression<String>? shelfLifeEvidenceVersion,
+    Expression<String>? fruitTagId,
     Expression<String>? localImageRelativePath,
     Expression<String>? remoteImageKey,
     Expression<DateTime>? createdAt,
@@ -1752,6 +1803,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       if (shelfLifeReason != null) 'shelf_life_reason': shelfLifeReason,
       if (shelfLifeEvidenceVersion != null)
         'shelf_life_evidence_version': shelfLifeEvidenceVersion,
+      if (fruitTagId != null) 'fruit_tag_id': fruitTagId,
       if (localImageRelativePath != null)
         'local_image_relative_path': localImageRelativePath,
       if (remoteImageKey != null) 'remote_image_key': remoteImageKey,
@@ -1781,6 +1833,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Value<String?>? shelfLifeGuidance,
     Value<String?>? shelfLifeReason,
     Value<String>? shelfLifeEvidenceVersion,
+    Value<String?>? fruitTagId,
     Value<String?>? localImageRelativePath,
     Value<String?>? remoteImageKey,
     Value<DateTime>? createdAt,
@@ -1808,6 +1861,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       shelfLifeReason: shelfLifeReason ?? this.shelfLifeReason,
       shelfLifeEvidenceVersion:
           shelfLifeEvidenceVersion ?? this.shelfLifeEvidenceVersion,
+      fruitTagId: fruitTagId ?? this.fruitTagId,
       localImageRelativePath:
           localImageRelativePath ?? this.localImageRelativePath,
       remoteImageKey: remoteImageKey ?? this.remoteImageKey,
@@ -1871,6 +1925,9 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
         shelfLifeEvidenceVersion.value,
       );
     }
+    if (fruitTagId.present) {
+      map['fruit_tag_id'] = Variable<String>(fruitTagId.value);
+    }
     if (localImageRelativePath.present) {
       map['local_image_relative_path'] = Variable<String>(
         localImageRelativePath.value,
@@ -1921,6 +1978,7 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
           ..write('shelfLifeGuidance: $shelfLifeGuidance, ')
           ..write('shelfLifeReason: $shelfLifeReason, ')
           ..write('shelfLifeEvidenceVersion: $shelfLifeEvidenceVersion, ')
+          ..write('fruitTagId: $fruitTagId, ')
           ..write('localImageRelativePath: $localImageRelativePath, ')
           ..write('remoteImageKey: $remoteImageKey, ')
           ..write('createdAt: $createdAt, ')
@@ -4345,6 +4403,290 @@ class DetachedEntityOriginsCompanion
   }
 }
 
+class $WorkspaceSequenceCountersTable extends WorkspaceSequenceCounters
+    with
+        TableInfo<
+          $WorkspaceSequenceCountersTable,
+          WorkspaceSequenceCounterRow
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkspaceSequenceCountersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _workspaceKeyMeta = const VerificationMeta(
+    'workspaceKey',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceKey = GeneratedColumn<String>(
+    'workspace_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nextValueMeta = const VerificationMeta(
+    'nextValue',
+  );
+  @override
+  late final GeneratedColumn<int> nextValue = GeneratedColumn<int>(
+    'next_value',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(nextValue).isBiggerOrEqualValue(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [workspaceKey, nextValue, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'workspace_sequence_counters';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkspaceSequenceCounterRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('workspace_key')) {
+      context.handle(
+        _workspaceKeyMeta,
+        workspaceKey.isAcceptableOrUnknown(
+          data['workspace_key']!,
+          _workspaceKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceKeyMeta);
+    }
+    if (data.containsKey('next_value')) {
+      context.handle(
+        _nextValueMeta,
+        nextValue.isAcceptableOrUnknown(data['next_value']!, _nextValueMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {workspaceKey};
+  @override
+  WorkspaceSequenceCounterRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkspaceSequenceCounterRow(
+      workspaceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_key'],
+      )!,
+      nextValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_value'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkspaceSequenceCountersTable createAlias(String alias) {
+    return $WorkspaceSequenceCountersTable(attachedDatabase, alias);
+  }
+}
+
+class WorkspaceSequenceCounterRow extends DataClass
+    implements Insertable<WorkspaceSequenceCounterRow> {
+  final String workspaceKey;
+  final int nextValue;
+  final DateTime updatedAt;
+  const WorkspaceSequenceCounterRow({
+    required this.workspaceKey,
+    required this.nextValue,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['workspace_key'] = Variable<String>(workspaceKey);
+    map['next_value'] = Variable<int>(nextValue);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  WorkspaceSequenceCountersCompanion toCompanion(bool nullToAbsent) {
+    return WorkspaceSequenceCountersCompanion(
+      workspaceKey: Value(workspaceKey),
+      nextValue: Value(nextValue),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory WorkspaceSequenceCounterRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkspaceSequenceCounterRow(
+      workspaceKey: serializer.fromJson<String>(json['workspaceKey']),
+      nextValue: serializer.fromJson<int>(json['nextValue']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'workspaceKey': serializer.toJson<String>(workspaceKey),
+      'nextValue': serializer.toJson<int>(nextValue),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  WorkspaceSequenceCounterRow copyWith({
+    String? workspaceKey,
+    int? nextValue,
+    DateTime? updatedAt,
+  }) => WorkspaceSequenceCounterRow(
+    workspaceKey: workspaceKey ?? this.workspaceKey,
+    nextValue: nextValue ?? this.nextValue,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  WorkspaceSequenceCounterRow copyWithCompanion(
+    WorkspaceSequenceCountersCompanion data,
+  ) {
+    return WorkspaceSequenceCounterRow(
+      workspaceKey: data.workspaceKey.present
+          ? data.workspaceKey.value
+          : this.workspaceKey,
+      nextValue: data.nextValue.present ? data.nextValue.value : this.nextValue,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspaceSequenceCounterRow(')
+          ..write('workspaceKey: $workspaceKey, ')
+          ..write('nextValue: $nextValue, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(workspaceKey, nextValue, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkspaceSequenceCounterRow &&
+          other.workspaceKey == this.workspaceKey &&
+          other.nextValue == this.nextValue &&
+          other.updatedAt == this.updatedAt);
+}
+
+class WorkspaceSequenceCountersCompanion
+    extends UpdateCompanion<WorkspaceSequenceCounterRow> {
+  final Value<String> workspaceKey;
+  final Value<int> nextValue;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const WorkspaceSequenceCountersCompanion({
+    this.workspaceKey = const Value.absent(),
+    this.nextValue = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkspaceSequenceCountersCompanion.insert({
+    required String workspaceKey,
+    this.nextValue = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : workspaceKey = Value(workspaceKey),
+       updatedAt = Value(updatedAt);
+  static Insertable<WorkspaceSequenceCounterRow> custom({
+    Expression<String>? workspaceKey,
+    Expression<int>? nextValue,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (workspaceKey != null) 'workspace_key': workspaceKey,
+      if (nextValue != null) 'next_value': nextValue,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkspaceSequenceCountersCompanion copyWith({
+    Value<String>? workspaceKey,
+    Value<int>? nextValue,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return WorkspaceSequenceCountersCompanion(
+      workspaceKey: workspaceKey ?? this.workspaceKey,
+      nextValue: nextValue ?? this.nextValue,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (workspaceKey.present) {
+      map['workspace_key'] = Variable<String>(workspaceKey.value);
+    }
+    if (nextValue.present) {
+      map['next_value'] = Variable<int>(nextValue.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspaceSequenceCountersCompanion(')
+          ..write('workspaceKey: $workspaceKey, ')
+          ..write('nextValue: $nextValue, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4357,6 +4699,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $OfflineWorkspaceStatesTable(this);
   late final $DetachedEntityOriginsTable detachedEntityOrigins =
       $DetachedEntityOriginsTable(this);
+  late final $WorkspaceSequenceCountersTable workspaceSequenceCounters =
+      $WorkspaceSequenceCountersTable(this);
   late final Index batchesOwnerIdx = Index(
     'batches_owner_idx',
     'CREATE INDEX batches_owner_idx ON batches (owner_id)',
@@ -4416,6 +4760,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     accountSyncSettings,
     offlineWorkspaceStates,
     detachedEntityOrigins,
+    workspaceSequenceCounters,
     batchesOwnerIdx,
     batchesUpdatedIdx,
     batchesActivePageIdx,
@@ -4923,6 +5268,7 @@ typedef $$ScanRecordsTableCreateCompanionBuilder =
       Value<String?> shelfLifeGuidance,
       Value<String?> shelfLifeReason,
       required String shelfLifeEvidenceVersion,
+      Value<String?> fruitTagId,
       Value<String?> localImageRelativePath,
       Value<String?> remoteImageKey,
       required DateTime createdAt,
@@ -4950,6 +5296,7 @@ typedef $$ScanRecordsTableUpdateCompanionBuilder =
       Value<String?> shelfLifeGuidance,
       Value<String?> shelfLifeReason,
       Value<String> shelfLifeEvidenceVersion,
+      Value<String?> fruitTagId,
       Value<String?> localImageRelativePath,
       Value<String?> remoteImageKey,
       Value<DateTime> createdAt,
@@ -5059,6 +5406,11 @@ class $$ScanRecordsTableFilterComposer
 
   ColumnFilters<String> get shelfLifeEvidenceVersion => $composableBuilder(
     column: $table.shelfLifeEvidenceVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fruitTagId => $composableBuilder(
+    column: $table.fruitTagId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5205,6 +5557,11 @@ class $$ScanRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fruitTagId => $composableBuilder(
+    column: $table.fruitTagId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get localImageRelativePath => $composableBuilder(
     column: $table.localImageRelativePath,
     builder: (column) => ColumnOrderings(column),
@@ -5342,6 +5699,11 @@ class $$ScanRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get fruitTagId => $composableBuilder(
+    column: $table.fruitTagId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get localImageRelativePath => $composableBuilder(
     column: $table.localImageRelativePath,
     builder: (column) => column,
@@ -5441,6 +5803,7 @@ class $$ScanRecordsTableTableManager
                 Value<String?> shelfLifeGuidance = const Value.absent(),
                 Value<String?> shelfLifeReason = const Value.absent(),
                 Value<String> shelfLifeEvidenceVersion = const Value.absent(),
+                Value<String?> fruitTagId = const Value.absent(),
                 Value<String?> localImageRelativePath = const Value.absent(),
                 Value<String?> remoteImageKey = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -5466,6 +5829,7 @@ class $$ScanRecordsTableTableManager
                 shelfLifeGuidance: shelfLifeGuidance,
                 shelfLifeReason: shelfLifeReason,
                 shelfLifeEvidenceVersion: shelfLifeEvidenceVersion,
+                fruitTagId: fruitTagId,
                 localImageRelativePath: localImageRelativePath,
                 remoteImageKey: remoteImageKey,
                 createdAt: createdAt,
@@ -5493,6 +5857,7 @@ class $$ScanRecordsTableTableManager
                 Value<String?> shelfLifeGuidance = const Value.absent(),
                 Value<String?> shelfLifeReason = const Value.absent(),
                 required String shelfLifeEvidenceVersion,
+                Value<String?> fruitTagId = const Value.absent(),
                 Value<String?> localImageRelativePath = const Value.absent(),
                 Value<String?> remoteImageKey = const Value.absent(),
                 required DateTime createdAt,
@@ -5518,6 +5883,7 @@ class $$ScanRecordsTableTableManager
                 shelfLifeGuidance: shelfLifeGuidance,
                 shelfLifeReason: shelfLifeReason,
                 shelfLifeEvidenceVersion: shelfLifeEvidenceVersion,
+                fruitTagId: fruitTagId,
                 localImageRelativePath: localImageRelativePath,
                 remoteImageKey: remoteImageKey,
                 createdAt: createdAt,
@@ -6914,6 +7280,189 @@ typedef $$DetachedEntityOriginsTableProcessedTableManager =
       DetachedEntityOriginRow,
       PrefetchHooks Function()
     >;
+typedef $$WorkspaceSequenceCountersTableCreateCompanionBuilder =
+    WorkspaceSequenceCountersCompanion Function({
+      required String workspaceKey,
+      Value<int> nextValue,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$WorkspaceSequenceCountersTableUpdateCompanionBuilder =
+    WorkspaceSequenceCountersCompanion Function({
+      Value<String> workspaceKey,
+      Value<int> nextValue,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$WorkspaceSequenceCountersTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkspaceSequenceCountersTable> {
+  $$WorkspaceSequenceCountersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get workspaceKey => $composableBuilder(
+    column: $table.workspaceKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextValue => $composableBuilder(
+    column: $table.nextValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WorkspaceSequenceCountersTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkspaceSequenceCountersTable> {
+  $$WorkspaceSequenceCountersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get workspaceKey => $composableBuilder(
+    column: $table.workspaceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextValue => $composableBuilder(
+    column: $table.nextValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WorkspaceSequenceCountersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkspaceSequenceCountersTable> {
+  $$WorkspaceSequenceCountersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get workspaceKey => $composableBuilder(
+    column: $table.workspaceKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get nextValue =>
+      $composableBuilder(column: $table.nextValue, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$WorkspaceSequenceCountersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkspaceSequenceCountersTable,
+          WorkspaceSequenceCounterRow,
+          $$WorkspaceSequenceCountersTableFilterComposer,
+          $$WorkspaceSequenceCountersTableOrderingComposer,
+          $$WorkspaceSequenceCountersTableAnnotationComposer,
+          $$WorkspaceSequenceCountersTableCreateCompanionBuilder,
+          $$WorkspaceSequenceCountersTableUpdateCompanionBuilder,
+          (
+            WorkspaceSequenceCounterRow,
+            BaseReferences<
+              _$AppDatabase,
+              $WorkspaceSequenceCountersTable,
+              WorkspaceSequenceCounterRow
+            >,
+          ),
+          WorkspaceSequenceCounterRow,
+          PrefetchHooks Function()
+        > {
+  $$WorkspaceSequenceCountersTableTableManager(
+    _$AppDatabase db,
+    $WorkspaceSequenceCountersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkspaceSequenceCountersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$WorkspaceSequenceCountersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$WorkspaceSequenceCountersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> workspaceKey = const Value.absent(),
+                Value<int> nextValue = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspaceSequenceCountersCompanion(
+                workspaceKey: workspaceKey,
+                nextValue: nextValue,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String workspaceKey,
+                Value<int> nextValue = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspaceSequenceCountersCompanion.insert(
+                workspaceKey: workspaceKey,
+                nextValue: nextValue,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WorkspaceSequenceCountersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkspaceSequenceCountersTable,
+      WorkspaceSequenceCounterRow,
+      $$WorkspaceSequenceCountersTableFilterComposer,
+      $$WorkspaceSequenceCountersTableOrderingComposer,
+      $$WorkspaceSequenceCountersTableAnnotationComposer,
+      $$WorkspaceSequenceCountersTableCreateCompanionBuilder,
+      $$WorkspaceSequenceCountersTableUpdateCompanionBuilder,
+      (
+        WorkspaceSequenceCounterRow,
+        BaseReferences<
+          _$AppDatabase,
+          $WorkspaceSequenceCountersTable,
+          WorkspaceSequenceCounterRow
+        >,
+      ),
+      WorkspaceSequenceCounterRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6933,4 +7482,9 @@ class $AppDatabaseManager {
       );
   $$DetachedEntityOriginsTableTableManager get detachedEntityOrigins =>
       $$DetachedEntityOriginsTableTableManager(_db, _db.detachedEntityOrigins);
+  $$WorkspaceSequenceCountersTableTableManager get workspaceSequenceCounters =>
+      $$WorkspaceSequenceCountersTableTableManager(
+        _db,
+        _db.workspaceSequenceCounters,
+      );
 }

@@ -62,12 +62,14 @@
     },
     {
       "step": 4,
-      "name": "Activation Heatmap Visualization",
+      "name": "Legacy Activation Heatmap Visualization",
       "output_shape": [1, 1, 7, 7],
       "output_name": "heatmap_map",
-      "colormap": "JET-style blue-green-yellow-red",
-      "blend_formula": "0.6 * Base_RGB + 0.4 * JET_Heatmap",
-      "description": "The exported activation map is bilinearly upsampled into a smooth overlay for rejected Upload assessments. It is explanation-only and does not show fruit boundaries or prove correctness."
+      "interpretation": "activation_map_legacy",
+      "status": "The current mobile handoff averages feature channels and is rendered as the existing Grad-CAM activation preview.",
+      "colormap": "blue-red/orange-yellow-green (green = highest relative activation)",
+      "blend_formula": "0.4 * Base_RGB + 0.6 * Shared_Heatmap_RGB",
+      "description": "This legacy tensor is the shipped explanation preview for Upload and Live Scan. It is not a predicted-class Grad-CAM evidence map. The separate replacement export remains pending validation."
     },
     {
       "step": 5,
@@ -75,6 +77,26 @@
       "evidence_source": "Postharvest Horticulture Training and Research Center (PHTRC) & PhilMech Literature Rules"
     }
   ],
+  "replacement_heatmap_contract": {
+    "status": "pending_validation",
+    "interpretation": "class_grad_cam",
+    "output_shape": [1, 9, "H", "W"],
+    "class_axis": 1,
+    "class_labels": [
+      "overripe-banana",
+      "overripe-mango",
+      "overripe-papaya",
+      "ripe-banana",
+      "ripe-mango",
+      "ripe-papaya",
+      "unripe-banana",
+      "unripe-mango",
+      "unripe-papaya"
+    ],
+    "target_layer": "model.blocks[-1]",
+    "upsampling_alignment": "align_corners_false",
+    "exporter": "experiments/chami_verified_gradcam_export.ipynb"
+  },
   "recognition_policy": {
     "automatic_retake_enabled": true,
     "maximum_probability_threshold": 0.75,

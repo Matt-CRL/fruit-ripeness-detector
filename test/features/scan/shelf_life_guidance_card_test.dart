@@ -19,10 +19,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Estimated time to ripen'), findsOneWidget);
-    expect(find.text('approximately 5–7 days'), findsOneWidget);
-    expect(find.text('Keep at room temperature.'), findsOneWidget);
     expect(find.text('Provisional literature estimate'), findsOneWidget);
+    expect(find.text('Read more'), findsOneWidget);
+    expect(find.text('Estimated time to ripen'), findsNothing);
+    expect(find.text('approximately 5–7 days'), findsNothing);
+    expect(find.text('Keep at room temperature.'), findsNothing);
     expect(
       find.text('Provisional literature-informed recommendation'),
       findsNothing,
@@ -31,6 +32,18 @@ void main() {
         .widget<Text>(find.text('Provisional literature estimate'))
         .style!;
     expect(provisionalStyle.fontWeight, FontWeight.w700);
+    expect(find.text(shelfLifeVariabilityDisclaimer), findsNothing);
+    expect(find.byKey(const Key('shelf-life-storage-icon')), findsNothing);
+    expect(find.byKey(const Key('shelf-life-disclaimer-icon')), findsNothing);
+    expect(find.byKey(const Key('shelf-life-time-icon')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('shelf-life-details-toggle')));
+    await tester.pump();
+
+    expect(find.text('Read less'), findsOneWidget);
+    expect(find.text('Estimated time to ripen'), findsOneWidget);
+    expect(find.text('approximately 5–7 days'), findsOneWidget);
+    expect(find.text('Keep at room temperature.'), findsOneWidget);
     expect(find.text(shelfLifeVariabilityDisclaimer), findsOneWidget);
     expect(find.byKey(const Key('shelf-life-storage-icon')), findsOneWidget);
     expect(find.byKey(const Key('shelf-life-disclaimer-icon')), findsOneWidget);
@@ -59,6 +72,14 @@ void main() {
       ),
     );
 
+    expect(find.text('Estimated quality window'), findsNothing);
+    expect(find.text('approximately 1–3 days'), findsNothing);
+    expect(find.text('Consume soon.'), findsNothing);
+    expect(find.text(shelfLifeVariabilityDisclaimer), findsNothing);
+
+    await tester.tap(find.byKey(const Key('shelf-life-details-toggle')));
+    await tester.pump();
+
     expect(find.text('Estimated quality window'), findsOneWidget);
     expect(find.text('approximately 1–3 days'), findsOneWidget);
     expect(find.text('Consume soon.'), findsOneWidget);
@@ -77,6 +98,19 @@ void main() {
       ),
     );
 
+    expect(find.text('Provisional literature estimate'), findsOneWidget);
+    expect(find.text('Read more'), findsOneWidget);
+    expect(find.text('Consume immediately'), findsNothing);
+    expect(find.text('Consume immediately if still sound.'), findsNothing);
+    expect(find.textContaining('0 days'), findsNothing);
+    expect(find.textContaining('0–0'), findsNothing);
+    expect(find.text(shelfLifeVariabilityDisclaimer), findsNothing);
+    expect(find.byKey(const Key('shelf-life-time-icon')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('shelf-life-details-toggle')));
+    await tester.pump();
+
+    expect(find.text('Read less'), findsOneWidget);
     expect(find.text('Consume immediately'), findsOneWidget);
     expect(find.text('Consume immediately if still sound.'), findsOneWidget);
     expect(find.textContaining('0 days'), findsNothing);

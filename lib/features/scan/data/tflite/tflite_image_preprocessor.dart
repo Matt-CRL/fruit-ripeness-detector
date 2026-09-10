@@ -6,6 +6,7 @@ import 'package:image/image.dart' as image;
 import 'package:kami/features/scan/data/camera/live_camera_frame_converter.dart';
 import 'package:kami/features/scan/data/tflite/image_preprocessing_exception.dart';
 import 'package:kami/features/scan/data/tflite/model_bundle_manifest.dart';
+import 'package:kami/features/scan/domain/heatmap_color_scale.dart';
 import 'package:kami/features/scan/domain/ripeness_classifier.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
@@ -69,11 +70,7 @@ Future<PreprocessedAssessmentInput> preprocessImageFile(
   List<double>? u2netAlphaMask,
 }) async {
   final bytes = await File(imagePath).readAsBytes();
-  return preprocessImageBytes(
-    bytes,
-    contract,
-    u2netAlphaMask: u2netAlphaMask,
-  );
+  return preprocessImageBytes(bytes, contract, u2netAlphaMask: u2netAlphaMask);
 }
 
 PreprocessedAssessmentInput preprocessImageBytes(
@@ -137,7 +134,9 @@ PreprocessedAssessmentInput _preprocessRgbImageWithPipeline(
 
   Uint8List? isolatedJpg;
   try {
-    isolatedJpg = Uint8List.fromList(image.encodeJpg(isolatedSquare, quality: 90));
+    isolatedJpg = Uint8List.fromList(
+      image.encodeJpg(isolatedSquare, quality: 90),
+    );
   } on Object {
     // Best-effort image encoding
   }
@@ -258,7 +257,13 @@ image.Image _letterboxSquare(image.Image source) {
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       final p = source.getPixel(x, y);
-      square.setPixelRgb(offX + x, offY + y, p.r.toInt(), p.g.toInt(), p.b.toInt());
+      square.setPixelRgb(
+        offX + x,
+        offY + y,
+        p.r.toInt(),
+        p.g.toInt(),
+        p.b.toInt(),
+      );
     }
   }
   return square;
@@ -281,15 +286,28 @@ Uint8List? generateGradCamOverlay(
     return null;
   }
 
+  final imageWidth = baseImage.width;
+  final imageHeight = baseImage.height;
+
   final minVal = values.reduce(math.min);
   final maxVal = values.reduce(math.max);
   final range = maxVal - minVal;
 
   final blended = image.Image(width: baseImage.width, height: baseImage.height);
 
-  double sampleHeatmap(double u, double v) {
-    final hx = (u * (heatmap.width - 1)).clamp(0.0, heatmap.width - 1.0);
-    final hy = (v * (heatmap.height - 1)).clamp(0.0, heatmap.height - 1.0);
+  double sampleHeatmap(int outputX, int outputY) {
+    // Match the notebook's bilinear upsample with align_corners=False. Each
+    // activation represents the center of an output cell rather than an
+    // endpoint of the full image. This avoids stretching the outer heatmap
+    // cells onto the image border.
+    final hx = ((outputX + 0.5) * heatmap.width / imageWidth - 0.5).clamp(
+      0.0,
+      heatmap.width - 1.0,
+    );
+    final hy = ((outputY + 0.5) * heatmap.height / imageHeight - 0.5).clamp(
+      0.0,
+      heatmap.height - 1.0,
+    );
     final x0 = hx.floor();
     final y0 = hy.floor();
     final x1 = math.min(x0 + 1, heatmap.width - 1);
@@ -308,20 +326,25 @@ Uint8List? generateGradCamOverlay(
   }
 
   for (var y = 0; y < baseImage.height; y++) {
-    final v = baseImage.height == 1 ? 0.0 : y / (baseImage.height - 1);
     for (var x = 0; x < baseImage.width; x++) {
-      final u = baseImage.width == 1 ? 0.0 : x / (baseImage.width - 1);
-      final rawVal = sampleHeatmap(u, v);
-      final heat = range <= 0 ? 0.5 : ((rawVal - minVal) / range).clamp(0.0, 1.0);
+      final rawVal = sampleHeatmap(x, y);
+      final heat = range <= 0
+          ? 0.5
+          : ((rawVal - minVal) / range).clamp(0.0, 1.0);
 
-      final jetR = (1.5 - (heat * 4.0 - 1.5).abs()).clamp(0.0, 1.0) * 255.0;
-      final jetG = (1.5 - (heat * 4.0 - 2.5).abs()).clamp(0.0, 1.0) * 255.0;
-      final jetB = (1.5 - (heat * 4.0 - 0.5).abs()).clamp(0.0, 1.0) * 255.0;
+      final heatColor = heatmapRgb(heat);
 
       final p = baseImage.getPixel(x, y);
-      final r = (0.6 * p.r + 0.4 * jetR).round().clamp(0, 255);
-      final g = (0.6 * p.g + 0.4 * jetG).round().clamp(0, 255);
-      final b = (0.6 * p.b + 0.4 * jetB).round().clamp(0, 255);
+      final baseWeight = 1 - heatmapOverlayOpacity;
+      final r = (baseWeight * p.r + heatmapOverlayOpacity * heatColor.red)
+          .round()
+          .clamp(0, 255);
+      final g = (baseWeight * p.g + heatmapOverlayOpacity * heatColor.green)
+          .round()
+          .clamp(0, 255);
+      final b = (baseWeight * p.b + heatmapOverlayOpacity * heatColor.blue)
+          .round()
+          .clamp(0, 255);
       blended.setPixelRgb(x, y, r, g, b);
     }
   }

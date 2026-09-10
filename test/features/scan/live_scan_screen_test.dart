@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/persistence/entity_id_generator.dart';
+import 'package:kami/features/history/application/adjust_saved_scan_ripeness.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
 import 'package:kami/features/scan/application/live_camera.dart';
 import 'package:kami/features/scan/application/live_scan_frame_store.dart';
@@ -85,6 +88,67 @@ void main() {
     );
     expect(find.text('Save Result'), findsNothing);
     expect(find.text('Pause result'), findsOneWidget);
+  });
+
+  testWidgets('does not offer Grad-CAM when the result has no overlay', (
+    tester,
+  ) async {
+    final session = _WidgetTestCameraSession();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          liveCameraGatewayProvider.overrideWithValue(
+            _WidgetTestCameraGateway(session),
+          ),
+          liveScanClassifierProvider.overrideWithValue(
+            _WidgetTestClassifierWithoutGradCam(),
+          ),
+        ],
+        child: const MaterialApp(home: LiveScanScreen()),
+      ),
+    );
+    await tester.pump();
+
+    session.emit(_widgetFrame);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Pause result'));
+    await tester.pump();
+
+    expect(
+      find.byTooltip('View AI Attention Heatmap (Grad-CAM)'),
+      findsNothing,
+    );
+    expect(find.text('View AI Heatmap (Grad-CAM)'), findsNothing);
+  });
+
+  testWidgets('labels the temporary legacy activation preview explicitly', (
+    tester,
+  ) async {
+    final session = _WidgetTestCameraSession();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          liveCameraGatewayProvider.overrideWithValue(
+            _WidgetTestCameraGateway(session),
+          ),
+          liveScanClassifierProvider.overrideWithValue(
+            _WidgetTestClassifier(legacyPreview: true),
+          ),
+        ],
+        child: const MaterialApp(home: LiveScanScreen()),
+      ),
+    );
+    await tester.pump();
+
+    session.emit(_widgetFrame);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Pause result'));
+    await tester.pump();
+
+    expect(find.text('View AI Activation Preview'), findsOneWidget);
+    expect(find.byTooltip('View AI Activation Preview'), findsOneWidget);
   });
 
   testWidgets('explains denied camera permission and offers retry', (
@@ -171,7 +235,7 @@ void main() {
   });
 
   testWidgets(
-    'saves the displayed frame and result once with a direct batch action',
+    'saves the clean target crop and result once with a direct batch action',
     (tester) async {
       final session = _WidgetTestCameraSession();
       final classifier = _WidgetTestClassifier();
@@ -209,6 +273,13 @@ void main() {
             liveScanClassifierProvider.overrideWithValue(classifier),
             liveScanFrameStoreProvider.overrideWithValue(frameStore),
             saveScanResultUseCaseProvider.overrideWithValue(saveResult),
+            fruitTagSequenceProvider.overrideWithValue(_TestFruitTagSequence()),
+            adjustSavedScanRipenessUseCaseProvider.overrideWithValue(
+              AdjustSavedScanRipenessUseCase(
+                repository,
+                () => DateTime.utc(2026, 7, 31, 0, 1),
+              ),
+            ),
             entityIdGeneratorProvider.overrideWithValue(
               const _FixedIdGenerator(),
             ),
@@ -223,12 +294,22 @@ void main() {
       await tester.pump();
       expect(find.text('Save Result'), findsOneWidget);
 
+      frameStore.writeGate = Completer<void>();
       await tester.tap(find.text('Save Result'));
+      await tester.pump();
+      expect(find.byTooltip('Adjust ripeness'), findsNothing);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Adjust ripeness'),
+        findsNothing,
+      );
+      frameStore.writeGate!.complete();
       await tester.pumpAndSettle();
 
       expect(session.stopCount, 1);
       expect(classifier.callCount, 1);
-      expect(frameStore.writtenFrames, [same(_savableWidgetFrame)]);
+      expect(frameStore.writtenFrames, isEmpty);
+      expect(frameStore.writtenTargetFrames, hasLength(1));
+      expect(frameStore.writtenTargetFrames.single.targetCrop, isNotNull);
       expect(frameStore.removedImages, hasLength(1));
       expect(retainedImages.retainCalls, 1);
       final records = await repository.listActive();
@@ -239,6 +320,14 @@ void main() {
       expect(records.single.resultOrigin, ResultOrigin.onDeviceModel);
       expect(find.text('Saved to History'), findsNothing);
       expect(find.text('Scan another fruit'), findsOneWidget);
+      expect(
+        find.byTooltip('View AI Attention Heatmap (Grad-CAM)'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(OutlinedButton, 'Adjust ripeness'),
+        findsOneWidget,
+      );
       expect(
         find.widgetWithText(OutlinedButton, 'Add to Batch'),
         findsOneWidget,
@@ -251,6 +340,29 @@ void main() {
       expect(find.textContaining('Storage:'), findsOneWidget);
       expect(find.text('Result saved'), findsNothing);
       expect(find.text('Would you like to add it to a batch?'), findsNothing);
+
+      final adjustRipeness = find.widgetWithText(
+        OutlinedButton,
+        'Adjust ripeness',
+      );
+      await tester.ensureVisible(adjustRipeness);
+      await tester.tap(adjustRipeness);
+      await tester.pumpAndSettle();
+      expect(find.text('Adjust Ripeness'), findsOneWidget);
+      await tester.tap(find.text('Overripe'));
+      await tester.tap(find.text('Apply Adjustment'));
+      await tester.pumpAndSettle();
+
+      final adjustedRecords = await repository.listActive();
+      expect(adjustedRecords.single.ripeness, RipenessStage.overripe);
+      expect(
+        adjustedRecords.single.modelVersion,
+        'test-model (adjusted by user)',
+      );
+      expect(
+        find.text('Estimated shelf life: Consume immediately'),
+        findsOneWidget,
+      );
 
       final addToBatch = find.widgetWithText(OutlinedButton, 'Add to Batch');
       await tester.ensureVisible(addToBatch);
@@ -289,6 +401,7 @@ void main() {
               () => DateTime.utc(2026, 7, 31),
             ),
           ),
+          fruitTagSequenceProvider.overrideWithValue(_TestFruitTagSequence()),
           entityIdGeneratorProvider.overrideWithValue(
             const _FixedIdGenerator(),
           ),
@@ -323,6 +436,19 @@ void main() {
     expect(find.text('Add to Batch'), findsOneWidget);
     expect(find.text('Scan another fruit'), findsOneWidget);
   });
+}
+
+final class _TestFruitTagSequence implements WorkspaceFruitTagSequence {
+  int _next = 1;
+
+  @override
+  Future<String> reserveNext() async {
+    final value = _next++;
+    return 'CH-${value.toString().padLeft(6, '0')}';
+  }
+
+  @override
+  Future<void> reconcileCurrentWorkspace() async {}
 }
 
 final class _WidgetTestCameraGateway implements LiveCameraGateway {
@@ -410,12 +536,35 @@ final class _WidgetTestCameraSession implements LiveCameraSession {
   Future<void> dispose() async {}
 }
 
+final _widgetIsolatedImageBytes = Uint8List.fromList([0xff, 0xd8, 0xff, 0xd9]);
+
 final class _WidgetTestClassifier implements LiveRipenessClassifier {
+  _WidgetTestClassifier({this.legacyPreview = false});
+
+  final bool legacyPreview;
   int callCount = 0;
 
   @override
   Future<ClassificationResult> classifyFrame(LiveCameraFrame frame) async {
     callCount++;
+    return ClassificationResult(
+      fruit: FruitIdentifier.carabaoMango,
+      ripeness: RipenessStage.ripe,
+      modelConfidence: 0.82,
+      modelVersion: 'test-model',
+      origin: ResultOrigin.onDeviceModel,
+      requiresRetake: false,
+      isolatedImageBytes: _widgetIsolatedImageBytes,
+      gradCamImageBytes: _widgetIsolatedImageBytes,
+      isLegacyActivationPreview: legacyPreview,
+    );
+  }
+}
+
+final class _WidgetTestClassifierWithoutGradCam
+    implements LiveRipenessClassifier {
+  @override
+  Future<ClassificationResult> classifyFrame(LiveCameraFrame frame) async {
     return const ClassificationResult(
       fruit: FruitIdentifier.carabaoMango,
       ripeness: RipenessStage.ripe,
@@ -476,12 +625,29 @@ final _savableWidgetFrame = LiveCameraFrame(
 
 final class _FakeLiveScanFrameStore implements LiveScanFrameStore {
   final List<LiveCameraFrame> writtenFrames = [];
+  final List<LiveCameraFrame> writtenTargetFrames = [];
   final List<SelectedScanImage> removedImages = [];
   bool failWrites = false;
+  Completer<void>? writeGate;
 
   @override
   Future<SelectedScanImage> writeTemporary(LiveCameraFrame frame) async {
     writtenFrames.add(frame);
+    if (failWrites) {
+      throw const LiveScanFrameStoreException('Synthetic frame write failure.');
+    }
+    return const SelectedScanImage(
+      path: '/virtual/live-scan.jpg',
+      name: 'live-scan.jpg',
+    );
+  }
+
+  @override
+  Future<SelectedScanImage> writeTemporaryTargetCrop(
+    LiveCameraFrame frame,
+  ) async {
+    writtenTargetFrames.add(frame);
+    await writeGate?.future;
     if (failWrites) {
       throw const LiveScanFrameStoreException('Synthetic frame write failure.');
     }

@@ -176,12 +176,14 @@ final class ModelInputContract {
     final mean = _requiredDoubleList(json, 'mean');
     final standardDeviation = _requiredDoubleList(json, 'standardDeviation');
     final pixelScale = _requiredDouble(json, 'pixelScale');
-    final isNchw = shape.length == 4 &&
+    final isNchw =
+        shape.length == 4 &&
         shape[0] == 1 &&
         shape[1] == 3 &&
         shape[2] > 0 &&
         shape[3] > 0;
-    final isNhwc = shape.length == 4 &&
+    final isNhwc =
+        shape.length == 4 &&
         shape[0] == 1 &&
         shape[1] > 0 &&
         shape[2] > 0 &&

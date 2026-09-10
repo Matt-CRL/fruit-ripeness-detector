@@ -75,10 +75,62 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   }
 
   @override
+  Future<SavedScanRecord> updateRipeness({
+    required String scanId,
+    required RipenessStage ripeness,
+    required String modelVersion,
+    required ShelfLifeEstimate shelfLife,
+    required DateTime updatedAt,
+  }) async {
+    PersistenceValidation.entityId(scanId, 'scanId');
+    PersistenceValidation.nonBlank(modelVersion, 'modelVersion');
+    PersistenceValidation.utc(updatedAt, 'updatedAt');
+
+    return _database.transaction(() async {
+      final query = _database.select(_database.scanRecords)
+        ..where(
+          (table) =>
+              table.id.equals(scanId) &
+              table.deletedAt.isNull() &
+              _ownerPredicate(table),
+        );
+      final existing = await query.getSingleOrNull();
+      if (existing == null) {
+        throw StateError('The saved scan is no longer available.');
+      }
+      if (updatedAt.isBefore(existing.updatedAt.toUtc())) {
+        throw StateError('The update time is older than the saved scan.');
+      }
+
+      final nextSyncState = existing.ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending;
+      await (_database.update(
+        _database.scanRecords,
+      )..where((table) => table.id.equals(scanId))).write(
+        _assessmentUpdateCompanion(
+          ripeness: ripeness,
+          modelVersion: modelVersion,
+          shelfLife: shelfLife,
+          updatedAt: updatedAt,
+          syncState: nextSyncState,
+        ),
+      );
+
+      final updated = await query.getSingle();
+      return fromRow(updated);
+    });
+  }
+
+  @override
   Future<SavedScanRecord?> findActiveById(String id) async {
     final query = _database.select(_database.scanRecords)
-      ..where((table) =>
-          table.id.equals(id) & table.deletedAt.isNull() & _ownerPredicate(table));
+      ..where(
+        (table) =>
+            table.id.equals(id) &
+            table.deletedAt.isNull() &
+            _ownerPredicate(table),
+      );
     final row = await query.getSingleOrNull();
     return row == null ? null : fromRow(row);
   }
@@ -86,8 +138,12 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
   @override
   Stream<SavedScanRecord?> watchActiveById(String id) {
     final query = _database.select(_database.scanRecords)
-      ..where((table) =>
-          table.id.equals(id) & table.deletedAt.isNull() & _ownerPredicate(table));
+      ..where(
+        (table) =>
+            table.id.equals(id) &
+            table.deletedAt.isNull() &
+            _ownerPredicate(table),
+      );
     return query.watchSingleOrNull().map(
       (row) => row == null ? null : fromRow(row),
     );
@@ -166,10 +222,12 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
 
     return _database.transaction(() async {
       final scanQuery = _database.select(_database.scanRecords)
-        ..where((table) =>
-            table.id.equals(scanId) &
-            table.deletedAt.isNull() &
-            _ownerPredicate(table));
+        ..where(
+          (table) =>
+              table.id.equals(scanId) &
+              table.deletedAt.isNull() &
+              _ownerPredicate(table),
+        );
       final scan = await scanQuery.getSingleOrNull();
       if (scan == null) {
         throw StateError('The saved scan is no longer available.');
@@ -312,6 +370,12 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
         PersistenceCodecs.encodeFruit(query.fruit!),
       );
     }
+    final fruitTagIdContains = query.fruitTagIdContains?.trim();
+    if (fruitTagIdContains != null && fruitTagIdContains.isNotEmpty) {
+      predicate &= table.fruitTagId.like(
+        '%${fruitTagIdContains.toUpperCase()}%',
+      );
+    }
     if (query.ripeness != null) {
       predicate &= table.ripenessStage.equals(
         PersistenceCodecs.encodeRipeness(query.ripeness!),
@@ -341,13 +405,66 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
 
   Expression<bool> _ownerPredicate($ScanRecordsTable table) {
     if (!scopeOwner) return const Constant(true);
-    return ownerId == null ? table.ownerId.isNull() : table.ownerId.equals(ownerId!);
+    return ownerId == null
+        ? table.ownerId.isNull()
+        : table.ownerId.equals(ownerId!);
+  }
+
+  static ScanRecordsCompanion _assessmentUpdateCompanion({
+    required RipenessStage ripeness,
+    required String modelVersion,
+    required ShelfLifeEstimate shelfLife,
+    required DateTime updatedAt,
+    required LocalSyncState syncState,
+  }) {
+    return ScanRecordsCompanion(
+      ripenessStage: Value(PersistenceCodecs.encodeRipeness(ripeness)),
+      modelVersion: Value(modelVersion),
+      shelfLifeStatus: Value(switch (shelfLife) {
+        ShelfLifeRange() => PersistenceCodecs.shelfLifeAvailable,
+        ShelfLifeConsumeImmediately() => PersistenceCodecs.shelfLifeAvailable,
+        ShelfLifeUnavailable() => PersistenceCodecs.shelfLifeUnavailable,
+      }),
+      shelfLifeMinimum: Value(switch (shelfLife) {
+        ShelfLifeRange() => shelfLife.minimum,
+        ShelfLifeConsumeImmediately() => 0,
+        ShelfLifeUnavailable() => null,
+      }),
+      shelfLifeMaximum: Value(switch (shelfLife) {
+        ShelfLifeRange() => shelfLife.maximum,
+        ShelfLifeConsumeImmediately() => 0,
+        ShelfLifeUnavailable() => null,
+      }),
+      shelfLifeUnit: Value(switch (shelfLife) {
+        ShelfLifeRange() => shelfLife.unit,
+        ShelfLifeConsumeImmediately() => 'days',
+        ShelfLifeUnavailable() => null,
+      }),
+      shelfLifeGuidance: Value(switch (shelfLife) {
+        ShelfLifeRange() => shelfLife.storageGuidance,
+        ShelfLifeConsumeImmediately() => shelfLife.storageGuidance,
+        ShelfLifeUnavailable() => null,
+      }),
+      shelfLifeReason: Value(switch (shelfLife) {
+        ShelfLifeRange() => null,
+        ShelfLifeConsumeImmediately() => null,
+        ShelfLifeUnavailable() => shelfLife.reason,
+      }),
+      shelfLifeEvidenceVersion: Value(switch (shelfLife) {
+        ShelfLifeRange() => shelfLife.evidenceVersion,
+        ShelfLifeConsumeImmediately() => shelfLife.evidenceVersion,
+        ShelfLifeUnavailable() => shelfLife.evidenceVersion,
+      }),
+      updatedAt: Value(updatedAt),
+      syncState: Value(PersistenceCodecs.encodeSyncState(syncState)),
+    );
   }
 
   static ScanRecordsCompanion _toCompanion(SavedScanRecord record) {
     final shelfLife = record.shelfLife;
     return ScanRecordsCompanion.insert(
       id: record.id,
+      fruitTagId: Value(record.fruitTagId),
       ownerId: Value(record.ownerId),
       batchId: Value(record.batchId),
       fruitType: PersistenceCodecs.encodeFruit(record.fruit),
@@ -431,6 +548,7 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
 
     return SavedScanRecord(
       id: row.id,
+      fruitTagId: row.fruitTagId,
       ownerId: row.ownerId,
       batchId: row.batchId,
       fruit: PersistenceCodecs.decodeFruit(row.fruitType),

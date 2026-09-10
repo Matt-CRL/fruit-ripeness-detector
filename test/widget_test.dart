@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -15,6 +16,7 @@ import 'package:kami/features/batches/domain/fruit_batch.dart';
 import 'package:kami/features/batches/presentation/batch_providers.dart';
 import 'package:kami/features/batches/presentation/batch_screens.dart';
 import 'package:kami/features/history/data/app_private_retained_scan_image_store.dart';
+import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/history/data/drift_scan_record_repository.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
@@ -26,6 +28,7 @@ import 'package:kami/features/scan/application/scan_service_providers.dart';
 import 'package:kami/features/scan/data/fakes/fake_scan_services.dart';
 import 'package:kami/features/scan/data/image_picker_scan_image_picker.dart';
 import 'package:kami/features/scan/data/shelf_life/literature_shelf_life_advisor.dart';
+import 'package:kami/features/scan/domain/ripeness_classifier.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 import 'package:kami/features/scan/presentation/scan_image_provider.dart';
 import 'package:kami/features/startup/domain/startup_destination.dart';
@@ -60,6 +63,27 @@ final Uint8List _validPngBytes = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
   '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
+
+final class _BlockingRipenessClassifier implements RipenessClassifier {
+  final Completer<ClassificationResult> _completion =
+      Completer<ClassificationResult>();
+
+  @override
+  Future<ClassificationResult> classify(String imagePath) => _completion.future;
+
+  void complete() {
+    _completion.complete(
+      const ClassificationResult(
+        fruit: FruitIdentifier.carabaoMango,
+        ripeness: RipenessStage.ripe,
+        modelConfidence: 0.87,
+        modelVersion: 'fake-foundation-v1',
+        origin: ResultOrigin.demo,
+        requiresRetake: false,
+      ),
+    );
+  }
+}
 
 void main() {
   testWidgets('fresh guest completes all three onboarding slides', (
@@ -703,6 +727,7 @@ void main() {
     await scans.create(
       _savedDemoRecord(
         id: '99999999-9999-4999-8999-999999999999',
+        fruitTagId: 'CH-000001',
         omitImage: true,
       ),
     );
@@ -710,7 +735,19 @@ void main() {
 
     expect(find.text('No saved scans yet'), findsNothing);
     expect(find.text('Showing 1 of 1 scans'), findsOneWidget);
+    expect(find.text('CH-000001'), findsOneWidget);
     expect(find.text('Carabao mango'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('history-fruit-id-search')),
+      'CH-999999',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No scans match this Fruit ID'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear Fruit ID search'));
+    await tester.pumpAndSettle();
+    expect(find.text('Showing 1 of 1 scans'), findsOneWidget);
   });
 
   testWidgets('History and Batches support larger text on a narrow screen', (
@@ -1084,6 +1121,40 @@ void main() {
     expect(find.text('Add to batch — persistence not enabled'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Rescan'), findsOneWidget);
     expect(picker.pickCalls, 1);
+  });
+
+  testWidgets('upload assessment shows progress while the model is running', (
+    WidgetTester tester,
+  ) async {
+    final picker = FakeScanImagePicker()..nextSelection = _galleryFixture;
+    final classifier = _BlockingRipenessClassifier();
+    await _pumpReturningGuest(
+      tester,
+      imagePicker: picker,
+      classifier: classifier,
+    );
+
+    await _openUploadFlow(tester);
+    await tester.tap(find.text('Choose from gallery'));
+    await _pumpImagePreview(tester);
+    await tester.scrollUntilVisible(find.text('Use photo'), 300);
+    await tester.tap(find.text('Use photo'));
+    await tester.pump();
+
+    expect(find.text('Assessing photo...'), findsOneWidget);
+    expect(find.bySemanticsLabel('Assessing photo'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Assessing photo...'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    classifier.complete();
+    await _pumpRoute(tester);
+    expect(find.text('Demo preview only'), findsOneWidget);
   });
 
   testWidgets('dark model confidence card uses a readable dark surface', (
@@ -1839,6 +1910,9 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Manage batch')).dy),
     );
     expect(find.byIcon(Icons.chevron_right), findsNWidgets(3));
+    expect(find.text('CH-000001'), findsOneWidget);
+    expect(find.text('CH-000002'), findsOneWidget);
+    expect(find.text('CH-000003'), findsOneWidget);
     expect(find.text('View all scans (6)'), findsOneWidget);
     expect(find.textContaining('Created Jul 31, 2026'), findsOneWidget);
     expect(find.text('Batch information'), findsOneWidget);
@@ -1867,6 +1941,23 @@ void main() {
     expect(find.text('Select'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.byIcon(Icons.chevron_right), findsNWidgets(6));
+
+    await tester.enterText(
+      find.byKey(const Key('batch-scans-fruit-id-search')),
+      'CH-000001',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 saved scans'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == 'CH-000001',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('CH-000002'), findsNothing);
+    await tester.tap(find.byTooltip('Clear Fruit ID search'));
+    await tester.pumpAndSettle();
+    expect(find.text('6 saved scans'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.chevron_right).first);
     await _pumpRoute(tester);
@@ -2613,6 +2704,7 @@ void main() {
 SavedScanRecord _savedDemoRecord({
   ResultOrigin origin = ResultOrigin.demo,
   String id = '11111111-1111-4111-8111-111111111111',
+  String? fruitTagId,
   String? batchId,
   FruitIdentifier fruit = FruitIdentifier.carabaoMango,
   RipenessStage ripeness = RipenessStage.ripe,
@@ -2626,6 +2718,7 @@ SavedScanRecord _savedDemoRecord({
   final savedAt = createdAt ?? DateTime.utc(2026, 7, 31, 1);
   return SavedScanRecord(
     id: id,
+    fruitTagId: fruitTagId,
     batchId: batchId,
     fruit: fruit,
     ripeness: ripeness,
@@ -2651,6 +2744,7 @@ List<SavedScanRecord> _batchScanFixtures({int count = 6}) {
     };
     return SavedScanRecord(
       id: '$sequence-2222-4222-8222-222222222222',
+      fruitTagId: 'CH-${(index + 1).toString().padLeft(6, '0')}',
       batchId: _batchFixtureId,
       fruit: FruitIdentifier.carabaoMango,
       ripeness: ripeness,
@@ -2727,6 +2821,7 @@ Future<void> _pumpKami(
   BatchSnapshot? batchSnapshotOverride,
   String? linkedAccountId,
   DeviceAccountLinkStore? linkStore,
+  RipenessClassifier? classifier,
 }) async {
   final repository = scanRepository ?? FakeScanRecordRepository();
   final imageStore = retainedImageStore ?? FakeRetainedScanImageStore();
@@ -2759,6 +2854,7 @@ Future<void> _pumpKami(
           deviceAccountLinkStoreProvider.overrideWithValue(linkStore),
         scanRecordRepositoryProvider.overrideWithValue(repository),
         retainedScanImageStoreProvider.overrideWithValue(imageStore),
+        fruitTagSequenceProvider.overrideWithValue(_TestFruitTagSequence()),
         batchRepositoryProvider.overrideWithValue(batches),
         orderRepositoryProvider.overrideWithValue(orders),
         if (batchSnapshotOverride != null)
@@ -2766,7 +2862,7 @@ Future<void> _pumpKami(
             batchSnapshotOverride.batch.id,
           ).overrideWith((ref) => Stream.value(batchSnapshotOverride)),
         ripenessClassifierProvider.overrideWithValue(
-          const FakeRipenessClassifier(),
+          classifier ?? const FakeRipenessClassifier(),
         ),
         shelfLifeAdvisorProvider.overrideWithValue(
           const LiteratureShelfLifeAdvisor(),
@@ -2784,9 +2880,23 @@ Future<void> _pumpKami(
   await tester.pumpAndSettle();
 }
 
+final class _TestFruitTagSequence implements WorkspaceFruitTagSequence {
+  int _next = 1;
+
+  @override
+  Future<String> reserveNext() async {
+    final value = _next++;
+    return 'CH-${value.toString().padLeft(6, '0')}';
+  }
+
+  @override
+  Future<void> reconcileCurrentWorkspace() async {}
+}
+
 Future<void> _pumpReturningGuest(
   WidgetTester tester, {
   required FakeScanImagePicker imagePicker,
+  RipenessClassifier? classifier,
   ScanImageProviderFactory? imageProviderFactory,
   AppearanceMode appearanceMode = AppearanceMode.light,
   ScanRecordRepository? scanRepository,
@@ -2807,6 +2917,7 @@ Future<void> _pumpReturningGuest(
       appearanceMode: appearanceMode,
     ),
     imagePicker: imagePicker,
+    classifier: classifier,
     imageProviderFactory:
         imageProviderFactory ?? (_) => MemoryImage(_validPngBytes),
     scanRepository: scanRepository,
