@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kami/core/database/app_database.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/core/persistence/persistence_codecs.dart';
 import 'package:kami/core/persistence/persistence_validation.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
@@ -81,6 +82,8 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
     required String modelVersion,
     required ShelfLifeEstimate shelfLife,
     required DateTime updatedAt,
+    RipenessUpdateSource updateSource = RipenessUpdateSource.manual,
+    DateTime? expectedUpdatedAt,
   }) async {
     PersistenceValidation.entityId(scanId, 'scanId');
     PersistenceValidation.nonBlank(modelVersion, 'modelVersion');
@@ -98,9 +101,11 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       if (existing == null) {
         throw StateError('The saved scan is no longer available.');
       }
+      _checkExpectedUpdateTime(existing.updatedAt, expectedUpdatedAt);
       if (updatedAt.isBefore(existing.updatedAt.toUtc())) {
         throw StateError('The update time is older than the saved scan.');
       }
+      await _ensureAssessmentEditable(existing.batchId);
 
       final nextSyncState = existing.ownerId == null
           ? LocalSyncState.localOnly
@@ -114,6 +119,85 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
           shelfLife: shelfLife,
           updatedAt: updatedAt,
           syncState: nextSyncState,
+          updateSource: updateSource,
+          ripenessUpdatedAt: updatedAt,
+        ),
+      );
+
+      final updated = await query.getSingle();
+      return fromRow(updated);
+    });
+  }
+
+  @override
+  Future<SavedScanRecord> replaceAssessment({
+    required String scanId,
+    required FruitIdentifier fruit,
+    required RipenessStage ripeness,
+    required double modelConfidence,
+    required String modelVersion,
+    required ResultOrigin resultOrigin,
+    required ShelfLifeEstimate shelfLife,
+    required String localImageRelativePath,
+    required ImageSyncState imageSyncState,
+    required RipenessUpdateSource updateSource,
+    required DateTime updatedAt,
+    DateTime? expectedUpdatedAt,
+  }) async {
+    PersistenceValidation.entityId(scanId, 'scanId');
+    PersistenceValidation.nonBlank(modelVersion, 'modelVersion');
+    PersistenceValidation.relativePath(
+      localImageRelativePath,
+      'localImageRelativePath',
+    );
+    if (modelConfidence < 0 || modelConfidence > 1) {
+      throw ArgumentError.value(
+        modelConfidence,
+        'modelConfidence',
+        'must be between 0 and 1',
+      );
+    }
+    PersistenceValidation.utc(updatedAt, 'updatedAt');
+
+    return _database.transaction(() async {
+      final query = _database.select(_database.scanRecords)
+        ..where(
+          (table) =>
+              table.id.equals(scanId) &
+              table.deletedAt.isNull() &
+              _ownerPredicate(table),
+        );
+      final existing = await query.getSingleOrNull();
+      if (existing == null) {
+        throw StateError('The saved scan is no longer available.');
+      }
+      _checkExpectedUpdateTime(existing.updatedAt, expectedUpdatedAt);
+      if (existing.fruitType != PersistenceCodecs.encodeFruit(fruit)) {
+        throw StateError('The rescan detected a different fruit type.');
+      }
+      if (updatedAt.isBefore(existing.updatedAt.toUtc())) {
+        throw StateError('The update time is older than the saved scan.');
+      }
+      await _ensureAssessmentEditable(existing.batchId);
+
+      final nextSyncState = existing.ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending;
+      await (_database.update(
+        _database.scanRecords,
+      )..where((table) => table.id.equals(scanId))).write(
+        _assessmentUpdateCompanion(
+          ripeness: ripeness,
+          modelVersion: modelVersion,
+          shelfLife: shelfLife,
+          updatedAt: updatedAt,
+          syncState: nextSyncState,
+          updateSource: updateSource,
+          ripenessUpdatedAt: updatedAt,
+          modelConfidence: modelConfidence,
+          resultOrigin: resultOrigin,
+          localImageRelativePath: localImageRelativePath,
+          imageSyncState: imageSyncState,
         ),
       );
 
@@ -416,10 +500,32 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
     required ShelfLifeEstimate shelfLife,
     required DateTime updatedAt,
     required LocalSyncState syncState,
+    required RipenessUpdateSource updateSource,
+    required DateTime ripenessUpdatedAt,
+    double? modelConfidence,
+    ResultOrigin? resultOrigin,
+    String? localImageRelativePath,
+    ImageSyncState? imageSyncState,
   }) {
     return ScanRecordsCompanion(
       ripenessStage: Value(PersistenceCodecs.encodeRipeness(ripeness)),
       modelVersion: Value(modelVersion),
+      ripenessUpdateSource: Value(
+        PersistenceCodecs.encodeRipenessUpdateSource(updateSource),
+      ),
+      ripenessUpdatedAt: Value(ripenessUpdatedAt),
+      modelConfidence: modelConfidence == null
+          ? const Value.absent()
+          : Value(modelConfidence),
+      resultOrigin: resultOrigin == null
+          ? const Value.absent()
+          : Value(PersistenceCodecs.encodeResultOrigin(resultOrigin)),
+      localImageRelativePath: localImageRelativePath == null
+          ? const Value.absent()
+          : Value(localImageRelativePath),
+      imageSyncState: imageSyncState == null
+          ? const Value.absent()
+          : Value(PersistenceCodecs.encodeImageSyncState(imageSyncState)),
       shelfLifeStatus: Value(switch (shelfLife) {
         ShelfLifeRange() => PersistenceCodecs.shelfLifeAvailable,
         ShelfLifeConsumeImmediately() => PersistenceCodecs.shelfLifeAvailable,
@@ -458,6 +564,28 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       updatedAt: Value(updatedAt),
       syncState: Value(PersistenceCodecs.encodeSyncState(syncState)),
     );
+  }
+
+  static void _checkExpectedUpdateTime(DateTime current, DateTime? expected) {
+    if (expected != null && current.toUtc() != expected.toUtc()) {
+      throw StateError('The saved scan changed while it was open.');
+    }
+  }
+
+  Future<void> _ensureAssessmentEditable(String? batchId) async {
+    if (batchId == null) return;
+    final completedOrderQuery = _database.select(_database.orders)
+      ..where(
+        (table) =>
+            table.batchId.equals(batchId) &
+            table.deletedAt.isNull() &
+            table.status.equals(
+              PersistenceCodecs.encodeOrderStatus(BatchOrderStatus.completed),
+            ),
+      );
+    if (await completedOrderQuery.getSingleOrNull() != null) {
+      throw StateError('A completed-order batch is locked.');
+    }
   }
 
   static ScanRecordsCompanion _toCompanion(SavedScanRecord record) {
@@ -509,6 +637,12 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
         ShelfLifeConsumeImmediately() => shelfLife.evidenceVersion,
         ShelfLifeUnavailable() => shelfLife.evidenceVersion,
       },
+      ripenessUpdateSource: Value(
+        PersistenceCodecs.encodeRipenessUpdateSource(
+          record.ripenessUpdateSource,
+        ),
+      ),
+      ripenessUpdatedAt: Value(record.ripenessUpdatedAt),
       localImageRelativePath: Value(record.localImageRelativePath),
       remoteImageKey: Value(record.remoteImageKey),
       createdAt: record.createdAt,
@@ -555,6 +689,12 @@ final class DriftScanRecordRepository implements ScanRecordRepository {
       ripeness: PersistenceCodecs.decodeRipeness(row.ripenessStage),
       modelConfidence: row.modelConfidence,
       modelVersion: row.modelVersion,
+      ripenessUpdateSource: row.ripenessUpdateSource == null
+          ? null
+          : PersistenceCodecs.decodeRipenessUpdateSource(
+              row.ripenessUpdateSource!,
+            ),
+      ripenessUpdatedAt: row.ripenessUpdatedAt?.toUtc(),
       resultOrigin: PersistenceCodecs.decodeResultOrigin(row.resultOrigin),
       shelfLife: shelfLife,
       localImageRelativePath: row.localImageRelativePath,

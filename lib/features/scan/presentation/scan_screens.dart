@@ -9,6 +9,7 @@ import 'package:kami/app/theme/app_colors.dart';
 import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
+import 'package:kami/features/history/application/replace_saved_scan_assessment.dart';
 import 'package:kami/features/history/application/fruit_tag_sequence.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/presentation/fruit_tag_card.dart';
@@ -24,6 +25,13 @@ import 'package:kami/features/scan/presentation/grad_cam_view.dart';
 
 enum LowConfidenceAction { uploadNewPhoto }
 
+final class ScanResultArguments {
+  const ScanResultArguments({required this.preview, this.updateRecord});
+
+  final ScanPreview preview;
+  final SavedScanRecord? updateRecord;
+}
+
 final class LowConfidencePreview {
   const LowConfidencePreview({
     required this.image,
@@ -35,9 +43,14 @@ final class LowConfidencePreview {
 }
 
 class ScanScreen extends ConsumerStatefulWidget {
-  const ScanScreen({this.openedFromRescan = false, super.key});
+  const ScanScreen({
+    this.openedFromRescan = false,
+    this.updateRecord,
+    super.key,
+  });
 
   final bool openedFromRescan;
+  final SavedScanRecord? updateRecord;
 
   @override
   ConsumerState<ScanScreen> createState() => _ScanScreenState();
@@ -163,7 +176,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         shelfLife: advisor.estimate(result),
       );
 
-      await context.push(AppRoutes.scanResult, extra: preview);
+      await context.push(
+        AppRoutes.scanResult,
+        extra: ScanResultArguments(
+          preview: preview,
+          updateRecord: widget.updateRecord,
+        ),
+      );
     } on RipenessClassificationException catch (error) {
       if (mounted) {
         setState(() {
@@ -581,9 +600,10 @@ class _InlineError extends StatelessWidget {
 }
 
 class ScanResultScreen extends ConsumerStatefulWidget {
-  const ScanResultScreen({required this.preview, super.key});
+  const ScanResultScreen({required this.preview, this.updateRecord, super.key});
 
   final ScanPreview? preview;
+  final SavedScanRecord? updateRecord;
 
   @override
   ConsumerState<ScanResultScreen> createState() => _ScanResultScreenState();
@@ -715,7 +735,10 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
     // A fresh upload therefore has no "Return to previous result" affordance,
     // and Android Back returns to the scan method rather than looping through
     // earlier assessment results.
-    context.pushReplacement(AppRoutes.scanUpload, extra: true);
+    context.pushReplacement(
+      AppRoutes.scanUpload,
+      extra: widget.updateRecord ?? true,
+    );
   }
 
   Future<void> _chooseSaveResult() async {
@@ -736,6 +759,34 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
   Future<void> _saveResult({required bool addToBatch}) async {
     final preview = _preview;
     if (preview == null || _saving || _savedRecord != null) {
+      return;
+    }
+
+    final updateRecord = widget.updateRecord;
+    if (updateRecord != null) {
+      setState(() {
+        _saving = true;
+        _saveError = null;
+      });
+      try {
+        final updated = await ref
+            .read(replaceSavedScanAssessmentUseCaseProvider)
+            .execute(
+              record: updateRecord,
+              preview: preview,
+              updateSource: RipenessUpdateSource.uploadRescan,
+            );
+        if (mounted) {
+          context.go(AppRoutes.savedScanDetails(updated.id));
+        }
+      } on ReplaceSavedScanAssessmentException catch (error) {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _saveError = error.message;
+          });
+        }
+      }
       return;
     }
 
@@ -849,6 +900,15 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                     isUserAdjusted: _userOverriddenStage != null,
                   ),
                   const SizedBox(height: 16),
+                  if (widget.updateRecord != null &&
+                      classification.fruit != widget.updateRecord!.fruit) ...[
+                    _InlineError(
+                      title: 'Different fruit detected',
+                      message:
+                          'This rescan cannot update the saved ${widget.updateRecord!.fruit.displayName} assessment. Choose the same fruit and try again.',
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (_saving ||
                       _saveError != null ||
                       (_savedRecord != null &&
@@ -872,7 +932,15 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                   ],
                   if (_savedRecord == null) ...[
                     FilledButton.icon(
-                      onPressed: _saving ? null : _chooseSaveResult,
+                      onPressed:
+                          _saving ||
+                              (widget.updateRecord != null &&
+                                  classification.fruit !=
+                                      widget.updateRecord!.fruit)
+                          ? null
+                          : widget.updateRecord != null
+                          ? () => _saveResult(addToBatch: false)
+                          : _chooseSaveResult,
                       icon: _saving
                           ? const SizedBox.square(
                               dimension: 18,
@@ -882,13 +950,25 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
                               ),
                             )
                           : const Icon(Icons.save_outlined),
-                      label: Text(_saving ? 'Saving...' : 'Save Result'),
+                      label: Text(
+                        _saving
+                            ? widget.updateRecord != null
+                                  ? 'Updating...'
+                                  : 'Saving...'
+                            : widget.updateRecord != null
+                            ? 'Update saved assessment'
+                            : 'Save Result',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: _rescan,
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Rescan'),
+                      label: Text(
+                        widget.updateRecord == null
+                            ? 'Rescan'
+                            : 'Choose another image',
+                      ),
                     ),
                   ] else ...[
                     FilledButton.icon(

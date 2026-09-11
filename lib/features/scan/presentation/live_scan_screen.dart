@@ -10,6 +10,7 @@ import 'package:kami/core/database/app_database_provider.dart';
 import 'package:kami/core/layout/kami_responsive.dart';
 import 'package:kami/features/history/application/adjust_saved_scan_ripeness.dart';
 import 'package:kami/features/history/application/fruit_tag_sequence.dart';
+import 'package:kami/features/history/application/replace_saved_scan_assessment.dart';
 import 'package:kami/features/history/application/save_scan_result.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/scan/application/live_camera.dart';
@@ -24,7 +25,9 @@ import 'package:kami/features/scan/presentation/scan_screens.dart';
 import 'package:kami/features/scan/presentation/grad_cam_view.dart';
 
 class LiveScanScreen extends ConsumerStatefulWidget {
-  const LiveScanScreen({super.key});
+  const LiveScanScreen({this.updateRecord, super.key});
+
+  final SavedScanRecord? updateRecord;
 
   @override
   ConsumerState<LiveScanScreen> createState() => _LiveScanScreenState();
@@ -239,7 +242,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
             .execute(
               scanId: savedRecord.id,
               ripeness: selectedStage,
-              modelVersion: modelVersion,
+              modelVersion: savedRecord.modelVersion,
               shelfLife: ref
                   .read(shelfLifeAdvisorProvider)
                   .estimate(classification),
@@ -269,6 +272,91 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
         snapshot.classification.requiresRetake ||
         _saving ||
         _savedRecord != null) {
+      return;
+    }
+
+    final updateRecord = widget.updateRecord;
+    if (updateRecord != null) {
+      if (snapshot.classification.fruit != updateRecord.fruit) {
+        setState(() {
+          _saveError =
+              'This rescan detected a different fruit type. Keep the saved '
+              'assessment unchanged and try again with the same fruit.';
+        });
+        return;
+      }
+
+      final frameStore = ref.read(liveScanFrameStoreProvider);
+      final shelfLifeAdvisor = ref.read(shelfLifeAdvisorProvider);
+      SelectedScanImage? temporaryImage;
+      setState(() {
+        _saving = true;
+        _saveError = null;
+      });
+      try {
+        await _controller.pause();
+        if (_controller.phase != LiveScanPhase.paused) {
+          throw StateError('Live Scan could not pause before updating.');
+        }
+        temporaryImage = await frameStore.writeTemporaryTargetCrop(
+          snapshot.frame,
+        );
+        final classificationToSave = _userOverriddenStage != null
+            ? ClassificationResult(
+                fruit: snapshot.classification.fruit,
+                ripeness: _userOverriddenStage!,
+                modelConfidence: snapshot.classification.modelConfidence,
+                modelVersion:
+                    '${snapshot.classification.modelVersion} (adjusted by user)',
+                origin: snapshot.classification.origin,
+                requiresRetake: false,
+                recognitionStatus: snapshot.classification.recognitionStatus,
+                heatmap: snapshot.classification.heatmap,
+                isolatedImageBytes: snapshot.classification.isolatedImageBytes,
+                gradCamImageBytes: snapshot.classification.gradCamImageBytes,
+                isLegacyActivationPreview:
+                    snapshot.classification.isLegacyActivationPreview,
+              )
+            : snapshot.classification;
+        final updated = await ref
+            .read(replaceSavedScanAssessmentUseCaseProvider)
+            .execute(
+              record: updateRecord,
+              preview: ScanPreview(
+                image: temporaryImage,
+                classification: classificationToSave,
+                shelfLife: shelfLifeAdvisor.estimate(classificationToSave),
+              ),
+              updateSource: RipenessUpdateSource.liveRescan,
+            );
+        if (mounted) {
+          context.go(AppRoutes.savedScanDetails(updated.id));
+        }
+      } on ReplaceSavedScanAssessmentException catch (error) {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _saveError = error.message;
+          });
+        }
+      } on Object {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _saveError =
+                'Chami could not update this live result. The previous '
+                'assessment was kept. Keep the result paused and try again.';
+          });
+        }
+      } finally {
+        if (temporaryImage != null) {
+          try {
+            await frameStore.removeTemporary(temporaryImage);
+          } on Object {
+            // The operating system may still clear an orphaned cache file.
+          }
+        }
+      }
       return;
     }
 
@@ -394,6 +482,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
     // failed controller can leave the next attempt without a prompt.
     context.replace(
       '${AppRoutes.scanLive}?retry=${DateTime.now().microsecondsSinceEpoch}',
+      extra: widget.updateRecord,
     );
   }
 
@@ -442,6 +531,7 @@ class _LiveScanScreenState extends ConsumerState<LiveScanScreen>
           onVerifyOrChange: _openRipenessIntervention,
           onViewGradCam: _showGradCam,
           onSave: _saveResult,
+          updatingExisting: widget.updateRecord != null,
           onPause: _controller.pause,
           onResume: _controller.resume,
           onScanAnother: _scanAnotherFruit,
@@ -491,6 +581,7 @@ class _LiveCameraBody extends StatefulWidget {
     required this.assignedBatchId,
     required this.saveError,
     required this.onSave,
+    required this.updatingExisting,
     required this.onPause,
     required this.onResume,
     required this.onScanAnother,
@@ -512,6 +603,7 @@ class _LiveCameraBody extends StatefulWidget {
   final VoidCallback? onVerifyOrChange;
   final VoidCallback? onViewGradCam;
   final Future<void> Function() onSave;
+  final bool updatingExisting;
   final Future<void> Function() onPause;
   final Future<void> Function() onResume;
   final Future<void> Function() onScanAnother;
@@ -656,6 +748,7 @@ class _LiveCameraBodyState extends State<_LiveCameraBody> {
                   onVerifyOrChange: widget.onVerifyOrChange,
                   onViewGradCam: widget.onViewGradCam,
                   onSave: widget.onSave,
+                  updatingExisting: widget.updatingExisting,
                   onPause: widget.onPause,
                   onResume: widget.onResume,
                   onScanAnother: widget.onScanAnother,
@@ -762,6 +855,7 @@ class _LiveResultPanel extends StatelessWidget {
     required this.assignedBatchId,
     required this.saveError,
     required this.onSave,
+    required this.updatingExisting,
     required this.onPause,
     required this.onResume,
     required this.onScanAnother,
@@ -783,6 +877,7 @@ class _LiveResultPanel extends StatelessWidget {
   final VoidCallback? onVerifyOrChange;
   final VoidCallback? onViewGradCam;
   final Future<void> Function() onSave;
+  final bool updatingExisting;
   final Future<void> Function() onPause;
   final Future<void> Function() onResume;
   final Future<void> Function() onScanAnother;
@@ -884,7 +979,15 @@ class _LiveResultPanel extends StatelessWidget {
                             ),
                           )
                         : const Icon(Icons.save_outlined),
-                    label: Text(saving ? 'Saving...' : 'Save Result'),
+                    label: Text(
+                      saving
+                          ? updatingExisting
+                                ? 'Updating...'
+                                : 'Saving...'
+                          : updatingExisting
+                          ? 'Update saved assessment'
+                          : 'Save Result',
+                    ),
                   ),
                   if (paused && onViewGradCam != null && canViewGradCam) ...[
                     const SizedBox(height: 10),

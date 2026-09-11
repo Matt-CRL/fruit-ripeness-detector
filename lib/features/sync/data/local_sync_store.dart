@@ -297,6 +297,8 @@ final class LocalSyncStore {
                 shelfLifeReason: Value(row.shelfLifeReason),
                 shelfLifeEvidenceVersion: row.shelfLifeEvidenceVersion,
                 fruitTagId: Value(row.fruitTagId),
+                ripenessUpdateSource: Value(row.ripenessUpdateSource),
+                ripenessUpdatedAt: Value(row.ripenessUpdatedAt),
                 localImageRelativePath: Value(row.localImageRelativePath),
                 remoteImageKey: const Value<String?>(null),
                 createdAt: row.createdAt,
@@ -746,6 +748,31 @@ final class LocalSyncStore {
           );
           final fruitTagId = existing?.fruitTagId ?? remoteFruitTagId;
           final localPath = existing?.localImageRelativePath;
+          final createdAt = _requiredDate(remote.values, 'created_at');
+          final updatedAt = _requiredDate(remote.values, 'updated_at');
+          final modelVersion = _requiredString(remote.values, 'model_version');
+          final remoteUpdateSource = _optionalString(
+            remote.values,
+            'ripeness_update_source',
+          );
+          final remoteRipenessUpdatedAt = _optionalDate(
+            remote.values,
+            'ripeness_updated_at',
+          );
+          final updateSource =
+              remoteUpdateSource ??
+              existing?.ripenessUpdateSource ??
+              (modelVersion.toLowerCase().contains('(adjusted by user)')
+                  ? 'manual'
+                  : 'initial');
+          final ripenessUpdatedAt =
+              remoteRipenessUpdatedAt ??
+              existing?.ripenessUpdatedAt ??
+              (modelVersion.toLowerCase().contains('(adjusted by user)')
+                  ? updatedAt
+                  : createdAt);
+          final needsUpdateMetadataBackfill =
+              remoteUpdateSource == null || remoteRipenessUpdatedAt == null;
           final imageState = remoteImageKey == null
               ? existing?.imageSyncState ??
                     PersistenceCodecs.encodeImageSyncState(
@@ -772,7 +799,7 @@ final class LocalSyncStore {
                     remote.values,
                     'model_confidence',
                   ),
-                  modelVersion: _requiredString(remote.values, 'model_version'),
+                  modelVersion: modelVersion,
                   resultOrigin: Value(
                     _requiredString(remote.values, 'result_origin'),
                   ),
@@ -800,14 +827,18 @@ final class LocalSyncStore {
                     'shelf_life_evidence_version',
                   ),
                   fruitTagId: Value(fruitTagId),
+                  ripenessUpdateSource: Value(updateSource),
+                  ripenessUpdatedAt: Value(ripenessUpdatedAt),
                   localImageRelativePath: Value(localPath),
                   remoteImageKey: Value(remoteImageKey),
-                  createdAt: _requiredDate(remote.values, 'created_at'),
-                  updatedAt: _requiredDate(remote.values, 'updated_at'),
+                  createdAt: createdAt,
+                  updatedAt: updatedAt,
                   deletedAt: Value(_optionalDate(remote.values, 'deleted_at')),
                   syncState: Value(
                     PersistenceCodecs.encodeSyncState(
-                      LocalSyncState.synchronized,
+                      needsUpdateMetadataBackfill
+                          ? LocalSyncState.pending
+                          : LocalSyncState.synchronized,
                     ),
                   ),
                   remoteRevision: Value(remote.revision),
@@ -1274,6 +1305,8 @@ final class LocalSyncStore {
                 shelfLifeReason: Value(scan.shelfLifeReason),
                 shelfLifeEvidenceVersion: scan.shelfLifeEvidenceVersion,
                 fruitTagId: Value(scan.fruitTagId),
+                ripenessUpdateSource: Value(scan.ripenessUpdateSource),
+                ripenessUpdatedAt: Value(scan.ripenessUpdatedAt),
                 localImageRelativePath: Value(imagePath),
                 remoteImageKey: const Value<String?>(null),
                 createdAt: scan.createdAt,
@@ -1444,6 +1477,8 @@ final class LocalSyncStore {
         'shelf_life_reason': row.shelfLifeReason,
         'shelf_life_evidence_version': row.shelfLifeEvidenceVersion,
         'fruit_tag_id': row.fruitTagId,
+        'ripeness_update_source': row.ripenessUpdateSource,
+        'ripeness_updated_at': row.ripenessUpdatedAt?.toUtc().toIso8601String(),
         'remote_image_key': row.remoteImageKey,
         'created_at': row.createdAt.toUtc().toIso8601String(),
         'updated_at': row.updatedAt.toUtc().toIso8601String(),
@@ -1451,6 +1486,17 @@ final class LocalSyncStore {
       },
       revision: row.remoteRevision,
       serverChangedAt: row.updatedAt.toUtc(),
+      hasPendingImageUpload:
+          row.imageSyncState ==
+              PersistenceCodecs.encodeImageSyncState(
+                ImageSyncState.pendingUpload,
+              ) ||
+          row.imageSyncState ==
+              PersistenceCodecs.encodeImageSyncState(
+                ImageSyncState.uploading,
+              ) ||
+          row.imageSyncState ==
+              PersistenceCodecs.encodeImageSyncState(ImageSyncState.failed),
     );
   }
 

@@ -10,6 +10,7 @@ import 'package:kami/features/batches/presentation/batch_screens.dart';
 import 'package:kami/features/batches/presentation/move_scan_screen.dart';
 import 'package:kami/features/history/presentation/history_screen.dart';
 import 'package:kami/features/history/presentation/saved_scan_detail_screen.dart';
+import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/home/presentation/home_screen.dart';
 import 'package:kami/features/onboarding/presentation/onboarding_screens.dart';
 import 'package:kami/features/orders/presentation/order_screen.dart';
@@ -207,9 +208,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.scan,
-        builder: (context, state) => ScanMethodScreen(
-          fromRescan: state.extra == true,
-        ),
+        builder: (context, state) =>
+            ScanMethodScreen(fromRescan: state.extra == true),
       ),
       GoRoute(
         path: AppRoutes.shelfLifePreview,
@@ -217,12 +217,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.scanLive,
-        builder: (context, state) => const LiveScanScreen(),
+        builder: (context, state) => LiveScanScreen(
+          updateRecord: state.extra is SavedScanRecord
+              ? state.extra as SavedScanRecord
+              : null,
+        ),
       ),
       GoRoute(
         path: AppRoutes.scanUpload,
         builder: (context, state) => ScanScreen(
           openedFromRescan: state.extra == true,
+          updateRecord: state.extra is SavedScanRecord
+              ? state.extra as SavedScanRecord
+              : null,
         ),
       ),
       GoRoute(
@@ -230,7 +237,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final preview = state.extra;
           return ScanResultScreen(
-            preview: preview is ScanPreview ? preview : null,
+            preview: preview is ScanResultArguments
+                ? preview.preview
+                : preview is ScanPreview
+                ? preview
+                : null,
+            updateRecord: preview is ScanResultArguments
+                ? preview.updateRecord
+                : null,
           );
         },
       ),

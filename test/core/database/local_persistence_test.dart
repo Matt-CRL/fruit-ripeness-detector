@@ -4,6 +4,7 @@ import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kami/core/database/app_database.dart';
 import 'package:kami/core/persistence/entity_id_generator.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/core/persistence/local_sync_state.dart';
 import 'package:kami/core/persistence/persistence_codecs.dart';
 import 'package:kami/features/batches/data/drift_batch_repository.dart';
@@ -49,7 +50,7 @@ void main() {
   });
 
   test(
-    'schema version nine opens with foreign keys and matches Drift',
+    'schema version ten opens with foreign keys and matches Drift',
     () async {
       final foreignKeys = await database
           .customSelect('PRAGMA foreign_keys')
@@ -58,9 +59,9 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
 
-      expect(database.schemaVersion, 9);
+      expect(database.schemaVersion, 10);
       expect(foreignKeys.data.values.single, 1);
-      expect(userVersion.data.values.single, 9);
+      expect(userVersion.data.values.single, 10);
       await database.validateDatabaseSchema();
     },
   );
@@ -122,6 +123,50 @@ void main() {
       );
       expect(row.shelfLifeStatus, PersistenceCodecs.shelfLifeAvailable);
       expect(row.shelfLifeEvidenceVersion, 'evidence-v2');
+      expect(row.ripenessUpdateSource, 'manual');
+      expect(row.ripenessUpdatedAt?.toUtc(), _updatedAt);
+    },
+  );
+
+  test(
+    'saved assessment rescan preserves identity and replaces assessment data',
+    () async {
+      await scans.create(
+        _scan(id: _scanOneId, ownerId: _ownerOneId, fruitTagId: 'CH-000014'),
+      );
+      final accountView = DriftScanRecordRepository(
+        database,
+        ownerId: _ownerOneId,
+        scopeOwner: true,
+      );
+
+      final updated = await accountView.replaceAssessment(
+        scanId: _scanOneId,
+        fruit: FruitIdentifier.carabaoMango,
+        ripeness: RipenessStage.overripe,
+        modelConfidence: 0.96,
+        modelVersion: 'replacement-model-v2',
+        resultOrigin: ResultOrigin.onDeviceModel,
+        shelfLife: const ShelfLifeConsumeImmediately(
+          storageGuidance: 'Consume soon.',
+          evidenceVersion: 'evidence-v3',
+        ),
+        localImageRelativePath: 'retained/scans/replacement.jpg',
+        imageSyncState: ImageSyncState.pendingUpload,
+        updateSource: RipenessUpdateSource.uploadRescan,
+        updatedAt: _updatedAt,
+        expectedUpdatedAt: _createdAt,
+      );
+
+      expect(updated.id, _scanOneId);
+      expect(updated.fruitTagId, 'CH-000014');
+      expect(updated.createdAt, _createdAt);
+      expect(updated.ripeness, RipenessStage.overripe);
+      expect(updated.modelConfidence, 0.96);
+      expect(updated.localImageRelativePath, 'retained/scans/replacement.jpg');
+      expect(updated.ripenessUpdateSource, RipenessUpdateSource.uploadRescan);
+      expect(updated.ripenessUpdatedAt, _updatedAt);
+      expect(updated.imageSyncState, ImageSyncState.pendingUpload);
     },
   );
 
@@ -183,7 +228,7 @@ void main() {
           .data
           .values
           .single,
-      9,
+      10,
     );
   });
 
@@ -292,7 +337,7 @@ void main() {
           .data
           .values
           .single,
-      9,
+      10,
     );
   });
 
@@ -346,7 +391,7 @@ void main() {
           .data
           .values
           .single,
-      9,
+      10,
     );
   });
 
@@ -962,6 +1007,7 @@ SavedScanRecord _scan({
   required String id,
   String? ownerId,
   String? batchId,
+  String? fruitTagId,
   FruitIdentifier fruit = FruitIdentifier.carabaoMango,
   RipenessStage ripeness = RipenessStage.ripe,
   ShelfLifeEstimate shelfLife = const ShelfLifeRange(
@@ -978,6 +1024,7 @@ SavedScanRecord _scan({
   final savedAt = createdAt ?? _createdAt;
   return SavedScanRecord(
     id: id,
+    fruitTagId: fruitTagId,
     ownerId: ownerId,
     batchId: batchId,
     fruit: fruit,

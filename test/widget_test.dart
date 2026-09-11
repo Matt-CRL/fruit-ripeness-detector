@@ -2426,6 +2426,51 @@ void main() {
     expect(find.text('87%'), findsOneWidget);
   });
 
+  testWidgets(
+    'real saved detail updates ripeness without changing its Fruit ID',
+    (WidgetTester tester) async {
+      final record = _savedDemoRecord(
+        origin: ResultOrigin.onDeviceModel,
+        fruitTagId: 'CH-000001',
+      );
+      final repository = FakeScanRecordRepository(initialRecords: [record]);
+      await _pumpReturningGuest(
+        tester,
+        imagePicker: FakeScanImagePicker(),
+        scanRepository: repository,
+      );
+
+      await tester.tap(find.bySemanticsLabel('History'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Carabao mango'));
+      await tester.pumpAndSettle();
+      expect(find.text('Update fruit ripeness stage'), findsOneWidget);
+      final updateButton = find.text('Update fruit ripeness stage');
+      await tester.ensureVisible(updateButton);
+      await tester.tap(updateButton);
+      await tester.pumpAndSettle();
+      expect(find.text('Rescan'), findsOneWidget);
+      expect(find.text('Choose how you want to update it.'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Upload'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Live Scan'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Update manually'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Update manually'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Overripe'));
+      await tester.tap(find.text('Apply Adjustment'));
+      await tester.pumpAndSettle();
+
+      final updated = await repository.findActiveById(record.id);
+      expect(updated?.id, record.id);
+      expect(updated?.fruitTagId, 'CH-000001');
+      expect(updated?.ripeness, RipenessStage.overripe);
+      expect(updated?.ripenessUpdateSource, RipenessUpdateSource.manual);
+    },
+  );
+
   testWidgets('saved assessment uses readable dark ripeness surfaces', (
     WidgetTester tester,
   ) async {

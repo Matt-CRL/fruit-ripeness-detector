@@ -355,9 +355,10 @@ void main() {
 
       final adjustedRecords = await repository.listActive();
       expect(adjustedRecords.single.ripeness, RipenessStage.overripe);
+      expect(adjustedRecords.single.modelVersion, 'test-model');
       expect(
-        adjustedRecords.single.modelVersion,
-        'test-model (adjusted by user)',
+        adjustedRecords.single.ripenessUpdateSource,
+        RipenessUpdateSource.manual,
       );
       expect(
         find.text('Estimated shelf life: Consume immediately'),

@@ -159,7 +159,9 @@ final class SyncCoordinator {
           gateway,
           userId,
           table,
-          include: (record) => record.values['deleted_at'] == null,
+          include: (record) =>
+              record.values['deleted_at'] == null &&
+              !record.hasPendingImageUpload,
         );
         pushed += outcome.accepted;
         conflicts += outcome.conflicts;
@@ -177,17 +179,6 @@ final class SyncCoordinator {
       pushed += pendingOrders.accepted;
       conflicts += pendingOrders.conflicts;
       recoverableFailures += pendingOrders.failures;
-      final completedOrders = await _pushTable(
-        gateway,
-        userId,
-        SyncTable.orders,
-        include: (record) =>
-            record.values['deleted_at'] == null &&
-            record.values['status'] == 'completed',
-      );
-      pushed += completedOrders.accepted;
-      conflicts += completedOrders.conflicts;
-      recoverableFailures += completedOrders.failures;
 
       final localSettings = await _local.readSettings(userId);
       if (localSettings.imageUploadConsent == true) {
@@ -201,6 +192,18 @@ final class SyncCoordinator {
         conflicts += revokeOutcome.conflicts;
         recoverableFailures += revokeOutcome.failures;
       }
+
+      final completedOrders = await _pushTable(
+        gateway,
+        userId,
+        SyncTable.orders,
+        include: (record) =>
+            record.values['deleted_at'] == null &&
+            record.values['status'] == 'completed',
+      );
+      pushed += completedOrders.accepted;
+      conflicts += completedOrders.conflicts;
+      recoverableFailures += completedOrders.failures;
 
       final pullStart = (localSettings.syncCursorAt ?? DateTime.utc(1970))
           .subtract(const Duration(minutes: 10));

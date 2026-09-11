@@ -22,6 +22,17 @@ enum RipenessStage {
 
 enum ResultOrigin { demo, onDeviceModel }
 
+enum RipenessUpdateSource {
+  initial('Initial scan'),
+  manual('Manual update'),
+  uploadRescan('Upload rescan'),
+  liveRescan('Live Scan rescan');
+
+  const RipenessUpdateSource(this.displayName);
+
+  final String displayName;
+}
+
 enum RecognitionStatus { recognized, notRecognizedOrUnclear }
 
 final class ActivationHeatmap {

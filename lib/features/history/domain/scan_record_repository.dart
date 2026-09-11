@@ -1,5 +1,6 @@
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/saved_scan_query.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
 
 abstract interface class ScanRecordRepository {
@@ -13,6 +14,25 @@ abstract interface class ScanRecordRepository {
     required String modelVersion,
     required ShelfLifeEstimate shelfLife,
     required DateTime updatedAt,
+    RipenessUpdateSource updateSource = RipenessUpdateSource.manual,
+    DateTime? expectedUpdatedAt,
+  });
+
+  /// Replaces the current assessment image and model result while preserving
+  /// the saved scan UUID, Fruit ID, fruit type, batch, and creation time.
+  Future<SavedScanRecord> replaceAssessment({
+    required String scanId,
+    required FruitIdentifier fruit,
+    required RipenessStage ripeness,
+    required double modelConfidence,
+    required String modelVersion,
+    required ResultOrigin resultOrigin,
+    required ShelfLifeEstimate shelfLife,
+    required String localImageRelativePath,
+    required ImageSyncState imageSyncState,
+    required RipenessUpdateSource updateSource,
+    required DateTime updatedAt,
+    DateTime? expectedUpdatedAt,
   });
 
   Future<SavedScanRecord?> findActiveById(String id);

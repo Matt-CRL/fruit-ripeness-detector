@@ -771,6 +771,29 @@ class $ScanRecordsTable extends ScanRecords
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _ripenessUpdateSourceMeta =
+      const VerificationMeta('ripenessUpdateSource');
+  @override
+  late final GeneratedColumn<String> ripenessUpdateSource =
+      GeneratedColumn<String>(
+        'ripeness_update_source',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _ripenessUpdatedAtMeta = const VerificationMeta(
+    'ripenessUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> ripenessUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'ripeness_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _localImageRelativePathMeta =
       const VerificationMeta('localImageRelativePath');
   @override
@@ -883,6 +906,8 @@ class $ScanRecordsTable extends ScanRecords
     shelfLifeReason,
     shelfLifeEvidenceVersion,
     fruitTagId,
+    ripenessUpdateSource,
+    ripenessUpdatedAt,
     localImageRelativePath,
     remoteImageKey,
     createdAt,
@@ -1047,6 +1072,24 @@ class $ScanRecordsTable extends ScanRecords
         ),
       );
     }
+    if (data.containsKey('ripeness_update_source')) {
+      context.handle(
+        _ripenessUpdateSourceMeta,
+        ripenessUpdateSource.isAcceptableOrUnknown(
+          data['ripeness_update_source']!,
+          _ripenessUpdateSourceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ripeness_updated_at')) {
+      context.handle(
+        _ripenessUpdatedAtMeta,
+        ripenessUpdatedAt.isAcceptableOrUnknown(
+          data['ripeness_updated_at']!,
+          _ripenessUpdatedAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('local_image_relative_path')) {
       context.handle(
         _localImageRelativePathMeta,
@@ -1184,6 +1227,14 @@ class $ScanRecordsTable extends ScanRecords
         DriftSqlType.string,
         data['${effectivePrefix}fruit_tag_id'],
       ),
+      ripenessUpdateSource: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ripeness_update_source'],
+      ),
+      ripenessUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ripeness_updated_at'],
+      ),
       localImageRelativePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}local_image_relative_path'],
@@ -1242,6 +1293,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
   final String? shelfLifeReason;
   final String shelfLifeEvidenceVersion;
   final String? fruitTagId;
+  final String? ripenessUpdateSource;
+  final DateTime? ripenessUpdatedAt;
   final String? localImageRelativePath;
   final String? remoteImageKey;
   final DateTime createdAt;
@@ -1267,6 +1320,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     this.shelfLifeReason,
     required this.shelfLifeEvidenceVersion,
     this.fruitTagId,
+    this.ripenessUpdateSource,
+    this.ripenessUpdatedAt,
     this.localImageRelativePath,
     this.remoteImageKey,
     required this.createdAt,
@@ -1312,6 +1367,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     );
     if (!nullToAbsent || fruitTagId != null) {
       map['fruit_tag_id'] = Variable<String>(fruitTagId);
+    }
+    if (!nullToAbsent || ripenessUpdateSource != null) {
+      map['ripeness_update_source'] = Variable<String>(ripenessUpdateSource);
+    }
+    if (!nullToAbsent || ripenessUpdatedAt != null) {
+      map['ripeness_updated_at'] = Variable<DateTime>(ripenessUpdatedAt);
     }
     if (!nullToAbsent || localImageRelativePath != null) {
       map['local_image_relative_path'] = Variable<String>(
@@ -1366,6 +1427,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       fruitTagId: fruitTagId == null && nullToAbsent
           ? const Value.absent()
           : Value(fruitTagId),
+      ripenessUpdateSource: ripenessUpdateSource == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ripenessUpdateSource),
+      ripenessUpdatedAt: ripenessUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ripenessUpdatedAt),
       localImageRelativePath: localImageRelativePath == null && nullToAbsent
           ? const Value.absent()
           : Value(localImageRelativePath),
@@ -1409,6 +1476,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
         json['shelfLifeEvidenceVersion'],
       ),
       fruitTagId: serializer.fromJson<String?>(json['fruitTagId']),
+      ripenessUpdateSource: serializer.fromJson<String?>(
+        json['ripenessUpdateSource'],
+      ),
+      ripenessUpdatedAt: serializer.fromJson<DateTime?>(
+        json['ripenessUpdatedAt'],
+      ),
       localImageRelativePath: serializer.fromJson<String?>(
         json['localImageRelativePath'],
       ),
@@ -1443,6 +1516,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
         shelfLifeEvidenceVersion,
       ),
       'fruitTagId': serializer.toJson<String?>(fruitTagId),
+      'ripenessUpdateSource': serializer.toJson<String?>(ripenessUpdateSource),
+      'ripenessUpdatedAt': serializer.toJson<DateTime?>(ripenessUpdatedAt),
       'localImageRelativePath': serializer.toJson<String?>(
         localImageRelativePath,
       ),
@@ -1473,6 +1548,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     Value<String?> shelfLifeReason = const Value.absent(),
     String? shelfLifeEvidenceVersion,
     Value<String?> fruitTagId = const Value.absent(),
+    Value<String?> ripenessUpdateSource = const Value.absent(),
+    Value<DateTime?> ripenessUpdatedAt = const Value.absent(),
     Value<String?> localImageRelativePath = const Value.absent(),
     Value<String?> remoteImageKey = const Value.absent(),
     DateTime? createdAt,
@@ -1509,6 +1586,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     shelfLifeEvidenceVersion:
         shelfLifeEvidenceVersion ?? this.shelfLifeEvidenceVersion,
     fruitTagId: fruitTagId.present ? fruitTagId.value : this.fruitTagId,
+    ripenessUpdateSource: ripenessUpdateSource.present
+        ? ripenessUpdateSource.value
+        : this.ripenessUpdateSource,
+    ripenessUpdatedAt: ripenessUpdatedAt.present
+        ? ripenessUpdatedAt.value
+        : this.ripenessUpdatedAt,
     localImageRelativePath: localImageRelativePath.present
         ? localImageRelativePath.value
         : this.localImageRelativePath,
@@ -1564,6 +1647,12 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
       fruitTagId: data.fruitTagId.present
           ? data.fruitTagId.value
           : this.fruitTagId,
+      ripenessUpdateSource: data.ripenessUpdateSource.present
+          ? data.ripenessUpdateSource.value
+          : this.ripenessUpdateSource,
+      ripenessUpdatedAt: data.ripenessUpdatedAt.present
+          ? data.ripenessUpdatedAt.value
+          : this.ripenessUpdatedAt,
       localImageRelativePath: data.localImageRelativePath.present
           ? data.localImageRelativePath.value
           : this.localImageRelativePath,
@@ -1602,6 +1691,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           ..write('shelfLifeReason: $shelfLifeReason, ')
           ..write('shelfLifeEvidenceVersion: $shelfLifeEvidenceVersion, ')
           ..write('fruitTagId: $fruitTagId, ')
+          ..write('ripenessUpdateSource: $ripenessUpdateSource, ')
+          ..write('ripenessUpdatedAt: $ripenessUpdatedAt, ')
           ..write('localImageRelativePath: $localImageRelativePath, ')
           ..write('remoteImageKey: $remoteImageKey, ')
           ..write('createdAt: $createdAt, ')
@@ -1632,6 +1723,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
     shelfLifeReason,
     shelfLifeEvidenceVersion,
     fruitTagId,
+    ripenessUpdateSource,
+    ripenessUpdatedAt,
     localImageRelativePath,
     remoteImageKey,
     createdAt,
@@ -1661,6 +1754,8 @@ class ScanRecordRow extends DataClass implements Insertable<ScanRecordRow> {
           other.shelfLifeReason == this.shelfLifeReason &&
           other.shelfLifeEvidenceVersion == this.shelfLifeEvidenceVersion &&
           other.fruitTagId == this.fruitTagId &&
+          other.ripenessUpdateSource == this.ripenessUpdateSource &&
+          other.ripenessUpdatedAt == this.ripenessUpdatedAt &&
           other.localImageRelativePath == this.localImageRelativePath &&
           other.remoteImageKey == this.remoteImageKey &&
           other.createdAt == this.createdAt &&
@@ -1688,6 +1783,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
   final Value<String?> shelfLifeReason;
   final Value<String> shelfLifeEvidenceVersion;
   final Value<String?> fruitTagId;
+  final Value<String?> ripenessUpdateSource;
+  final Value<DateTime?> ripenessUpdatedAt;
   final Value<String?> localImageRelativePath;
   final Value<String?> remoteImageKey;
   final Value<DateTime> createdAt;
@@ -1714,6 +1811,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     this.shelfLifeReason = const Value.absent(),
     this.shelfLifeEvidenceVersion = const Value.absent(),
     this.fruitTagId = const Value.absent(),
+    this.ripenessUpdateSource = const Value.absent(),
+    this.ripenessUpdatedAt = const Value.absent(),
     this.localImageRelativePath = const Value.absent(),
     this.remoteImageKey = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1741,6 +1840,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     this.shelfLifeReason = const Value.absent(),
     required String shelfLifeEvidenceVersion,
     this.fruitTagId = const Value.absent(),
+    this.ripenessUpdateSource = const Value.absent(),
+    this.ripenessUpdatedAt = const Value.absent(),
     this.localImageRelativePath = const Value.absent(),
     this.remoteImageKey = const Value.absent(),
     required DateTime createdAt,
@@ -1776,6 +1877,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Expression<String>? shelfLifeReason,
     Expression<String>? shelfLifeEvidenceVersion,
     Expression<String>? fruitTagId,
+    Expression<String>? ripenessUpdateSource,
+    Expression<DateTime>? ripenessUpdatedAt,
     Expression<String>? localImageRelativePath,
     Expression<String>? remoteImageKey,
     Expression<DateTime>? createdAt,
@@ -1804,6 +1907,9 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       if (shelfLifeEvidenceVersion != null)
         'shelf_life_evidence_version': shelfLifeEvidenceVersion,
       if (fruitTagId != null) 'fruit_tag_id': fruitTagId,
+      if (ripenessUpdateSource != null)
+        'ripeness_update_source': ripenessUpdateSource,
+      if (ripenessUpdatedAt != null) 'ripeness_updated_at': ripenessUpdatedAt,
       if (localImageRelativePath != null)
         'local_image_relative_path': localImageRelativePath,
       if (remoteImageKey != null) 'remote_image_key': remoteImageKey,
@@ -1834,6 +1940,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     Value<String?>? shelfLifeReason,
     Value<String>? shelfLifeEvidenceVersion,
     Value<String?>? fruitTagId,
+    Value<String?>? ripenessUpdateSource,
+    Value<DateTime?>? ripenessUpdatedAt,
     Value<String?>? localImageRelativePath,
     Value<String?>? remoteImageKey,
     Value<DateTime>? createdAt,
@@ -1862,6 +1970,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
       shelfLifeEvidenceVersion:
           shelfLifeEvidenceVersion ?? this.shelfLifeEvidenceVersion,
       fruitTagId: fruitTagId ?? this.fruitTagId,
+      ripenessUpdateSource: ripenessUpdateSource ?? this.ripenessUpdateSource,
+      ripenessUpdatedAt: ripenessUpdatedAt ?? this.ripenessUpdatedAt,
       localImageRelativePath:
           localImageRelativePath ?? this.localImageRelativePath,
       remoteImageKey: remoteImageKey ?? this.remoteImageKey,
@@ -1928,6 +2038,14 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
     if (fruitTagId.present) {
       map['fruit_tag_id'] = Variable<String>(fruitTagId.value);
     }
+    if (ripenessUpdateSource.present) {
+      map['ripeness_update_source'] = Variable<String>(
+        ripenessUpdateSource.value,
+      );
+    }
+    if (ripenessUpdatedAt.present) {
+      map['ripeness_updated_at'] = Variable<DateTime>(ripenessUpdatedAt.value);
+    }
     if (localImageRelativePath.present) {
       map['local_image_relative_path'] = Variable<String>(
         localImageRelativePath.value,
@@ -1979,6 +2097,8 @@ class ScanRecordsCompanion extends UpdateCompanion<ScanRecordRow> {
           ..write('shelfLifeReason: $shelfLifeReason, ')
           ..write('shelfLifeEvidenceVersion: $shelfLifeEvidenceVersion, ')
           ..write('fruitTagId: $fruitTagId, ')
+          ..write('ripenessUpdateSource: $ripenessUpdateSource, ')
+          ..write('ripenessUpdatedAt: $ripenessUpdatedAt, ')
           ..write('localImageRelativePath: $localImageRelativePath, ')
           ..write('remoteImageKey: $remoteImageKey, ')
           ..write('createdAt: $createdAt, ')
@@ -5269,6 +5389,8 @@ typedef $$ScanRecordsTableCreateCompanionBuilder =
       Value<String?> shelfLifeReason,
       required String shelfLifeEvidenceVersion,
       Value<String?> fruitTagId,
+      Value<String?> ripenessUpdateSource,
+      Value<DateTime?> ripenessUpdatedAt,
       Value<String?> localImageRelativePath,
       Value<String?> remoteImageKey,
       required DateTime createdAt,
@@ -5297,6 +5419,8 @@ typedef $$ScanRecordsTableUpdateCompanionBuilder =
       Value<String?> shelfLifeReason,
       Value<String> shelfLifeEvidenceVersion,
       Value<String?> fruitTagId,
+      Value<String?> ripenessUpdateSource,
+      Value<DateTime?> ripenessUpdatedAt,
       Value<String?> localImageRelativePath,
       Value<String?> remoteImageKey,
       Value<DateTime> createdAt,
@@ -5411,6 +5535,16 @@ class $$ScanRecordsTableFilterComposer
 
   ColumnFilters<String> get fruitTagId => $composableBuilder(
     column: $table.fruitTagId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ripenessUpdateSource => $composableBuilder(
+    column: $table.ripenessUpdateSource,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get ripenessUpdatedAt => $composableBuilder(
+    column: $table.ripenessUpdatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5562,6 +5696,16 @@ class $$ScanRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get ripenessUpdateSource => $composableBuilder(
+    column: $table.ripenessUpdateSource,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get ripenessUpdatedAt => $composableBuilder(
+    column: $table.ripenessUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get localImageRelativePath => $composableBuilder(
     column: $table.localImageRelativePath,
     builder: (column) => ColumnOrderings(column),
@@ -5704,6 +5848,16 @@ class $$ScanRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get ripenessUpdateSource => $composableBuilder(
+    column: $table.ripenessUpdateSource,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get ripenessUpdatedAt => $composableBuilder(
+    column: $table.ripenessUpdatedAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get localImageRelativePath => $composableBuilder(
     column: $table.localImageRelativePath,
     builder: (column) => column,
@@ -5804,6 +5958,8 @@ class $$ScanRecordsTableTableManager
                 Value<String?> shelfLifeReason = const Value.absent(),
                 Value<String> shelfLifeEvidenceVersion = const Value.absent(),
                 Value<String?> fruitTagId = const Value.absent(),
+                Value<String?> ripenessUpdateSource = const Value.absent(),
+                Value<DateTime?> ripenessUpdatedAt = const Value.absent(),
                 Value<String?> localImageRelativePath = const Value.absent(),
                 Value<String?> remoteImageKey = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -5830,6 +5986,8 @@ class $$ScanRecordsTableTableManager
                 shelfLifeReason: shelfLifeReason,
                 shelfLifeEvidenceVersion: shelfLifeEvidenceVersion,
                 fruitTagId: fruitTagId,
+                ripenessUpdateSource: ripenessUpdateSource,
+                ripenessUpdatedAt: ripenessUpdatedAt,
                 localImageRelativePath: localImageRelativePath,
                 remoteImageKey: remoteImageKey,
                 createdAt: createdAt,
@@ -5858,6 +6016,8 @@ class $$ScanRecordsTableTableManager
                 Value<String?> shelfLifeReason = const Value.absent(),
                 required String shelfLifeEvidenceVersion,
                 Value<String?> fruitTagId = const Value.absent(),
+                Value<String?> ripenessUpdateSource = const Value.absent(),
+                Value<DateTime?> ripenessUpdatedAt = const Value.absent(),
                 Value<String?> localImageRelativePath = const Value.absent(),
                 Value<String?> remoteImageKey = const Value.absent(),
                 required DateTime createdAt,
@@ -5884,6 +6044,8 @@ class $$ScanRecordsTableTableManager
                 shelfLifeReason: shelfLifeReason,
                 shelfLifeEvidenceVersion: shelfLifeEvidenceVersion,
                 fruitTagId: fruitTagId,
+                ripenessUpdateSource: ripenessUpdateSource,
+                ripenessUpdatedAt: ripenessUpdatedAt,
                 localImageRelativePath: localImageRelativePath,
                 remoteImageKey: remoteImageKey,
                 createdAt: createdAt,

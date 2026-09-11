@@ -90,6 +90,8 @@ class ScanRecords extends Table {
     min: 9,
     max: 32,
   )();
+  late final TextColumn ripenessUpdateSource = text().nullable()();
+  late final DateTimeColumn ripenessUpdatedAt = dateTime().nullable()();
   late final TextColumn localImageRelativePath = text().nullable()();
   late final TextColumn remoteImageKey = text().nullable()();
   late final DateTimeColumn createdAt = dateTime()();
@@ -132,6 +134,12 @@ class ScanRecords extends Table {
     )''',
     'CHECK (length(trim(model_version)) > 0)',
     'CHECK (length(trim(shelf_life_evidence_version)) > 0)',
+    '''CHECK (
+      ripeness_update_source IS NULL
+      OR ripeness_update_source IN (
+        'initial', 'manual', 'upload_rescan', 'live_rescan'
+      )
+    )''',
     '''CHECK (
       local_image_relative_path IS NULL
       OR length(trim(local_image_relative_path)) > 0
@@ -276,7 +284,7 @@ final class AppDatabase extends _$AppDatabase {
   AppDatabase.defaults() : super(driftDatabase(name: 'kami'));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -428,6 +436,36 @@ final class AppDatabase extends _$AppDatabase {
               ''');
             sequence++;
           }
+        }
+      }
+      if (from < 10) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (tableNames.contains('scan_records')) {
+          await migrator.addColumn(
+            scanRecords,
+            scanRecords.ripenessUpdateSource,
+          );
+          await migrator.addColumn(scanRecords, scanRecords.ripenessUpdatedAt);
+          await customStatement('''
+            UPDATE scan_records
+            SET ripeness_update_source = CASE
+                  WHEN lower(model_version) LIKE '%(adjusted by user)%'
+                    THEN 'manual'
+                  ELSE 'initial'
+                END,
+                ripeness_updated_at = CASE
+                  WHEN lower(model_version) LIKE '%(adjusted by user)%'
+                    THEN updated_at
+                  ELSE created_at
+                END
+            WHERE ripeness_update_source IS NULL
+               OR ripeness_updated_at IS NULL
+            ''');
         }
       }
     },

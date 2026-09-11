@@ -17,6 +17,8 @@ final class SavedScanRecord {
     required this.updatedAt,
     required this.syncState,
     this.fruitTagId,
+    RipenessUpdateSource? ripenessUpdateSource,
+    DateTime? ripenessUpdatedAt,
     this.remoteRevision = 0,
     this.imageSyncState = ImageSyncState.localOnly,
     this.ownerId,
@@ -24,7 +26,12 @@ final class SavedScanRecord {
     this.localImageRelativePath,
     this.remoteImageKey,
     this.deletedAt,
-  }) {
+  }) : ripenessUpdateSource =
+           ripenessUpdateSource ??
+           (_hasLegacyManualAdjustment(modelVersion)
+               ? RipenessUpdateSource.manual
+               : RipenessUpdateSource.initial),
+       ripenessUpdatedAt = (ripenessUpdatedAt ?? createdAt).toUtc() {
     PersistenceValidation.entityId(id, 'id');
     if (fruitTagId != null && !FruitTagIds.isValid(fruitTagId)) {
       throw ArgumentError.value(fruitTagId, 'fruitTagId', 'must be a CH ID');
@@ -49,6 +56,7 @@ final class SavedScanRecord {
     _validateShelfLife(shelfLife);
     PersistenceValidation.utc(createdAt, 'createdAt');
     PersistenceValidation.utc(updatedAt, 'updatedAt');
+    PersistenceValidation.utc(this.ripenessUpdatedAt, 'ripenessUpdatedAt');
     if (deletedAt != null) {
       PersistenceValidation.utc(deletedAt!, 'deletedAt');
     }
@@ -68,6 +76,8 @@ final class SavedScanRecord {
 
   final String id;
   final String? fruitTagId;
+  final RipenessUpdateSource ripenessUpdateSource;
+  final DateTime ripenessUpdatedAt;
   final String? ownerId;
   final String? batchId;
   final FruitIdentifier fruit;
@@ -84,6 +94,9 @@ final class SavedScanRecord {
   final LocalSyncState syncState;
   final int remoteRevision;
   final ImageSyncState imageSyncState;
+
+  static bool _hasLegacyManualAdjustment(String modelVersion) =>
+      modelVersion.toLowerCase().contains('(adjusted by user)');
 
   static void _validateShelfLife(ShelfLifeEstimate value) {
     switch (value) {

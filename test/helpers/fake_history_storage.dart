@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:kami/core/persistence/local_sync_state.dart';
+import 'package:kami/core/persistence/image_sync_state.dart';
 import 'package:kami/features/history/domain/retained_scan_image_store.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/domain/scan_record_repository.dart';
@@ -102,6 +103,8 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
     required String modelVersion,
     required ShelfLifeEstimate shelfLife,
     required DateTime updatedAt,
+    RipenessUpdateSource updateSource = RipenessUpdateSource.manual,
+    DateTime? expectedUpdatedAt,
   }) async {
     ripenessUpdateCalls += 1;
     if (failRipenessUpdates) {
@@ -132,6 +135,56 @@ final class FakeScanRecordRepository implements ScanRecordRepository {
           : LocalSyncState.pending,
       remoteRevision: record.remoteRevision,
       imageSyncState: record.imageSyncState,
+      ripenessUpdateSource: updateSource,
+      ripenessUpdatedAt: updatedAt,
+    );
+    _records[scanId] = updated;
+    _emit();
+    return updated;
+  }
+
+  @override
+  Future<SavedScanRecord> replaceAssessment({
+    required String scanId,
+    required FruitIdentifier fruit,
+    required RipenessStage ripeness,
+    required double modelConfidence,
+    required String modelVersion,
+    required ResultOrigin resultOrigin,
+    required ShelfLifeEstimate shelfLife,
+    required String localImageRelativePath,
+    required ImageSyncState imageSyncState,
+    required RipenessUpdateSource updateSource,
+    required DateTime updatedAt,
+    DateTime? expectedUpdatedAt,
+  }) async {
+    final record = await findActiveById(scanId);
+    if (record == null || record.fruit != fruit) {
+      throw StateError('Synthetic scan unavailable or fruit mismatch.');
+    }
+    final updated = SavedScanRecord(
+      id: record.id,
+      fruitTagId: record.fruitTagId,
+      ownerId: record.ownerId,
+      batchId: record.batchId,
+      fruit: fruit,
+      ripeness: ripeness,
+      modelConfidence: modelConfidence,
+      modelVersion: modelVersion,
+      resultOrigin: resultOrigin,
+      shelfLife: shelfLife,
+      localImageRelativePath: localImageRelativePath,
+      remoteImageKey: record.remoteImageKey,
+      createdAt: record.createdAt,
+      updatedAt: updatedAt,
+      deletedAt: record.deletedAt,
+      syncState: record.ownerId == null
+          ? LocalSyncState.localOnly
+          : LocalSyncState.pending,
+      remoteRevision: record.remoteRevision,
+      imageSyncState: imageSyncState,
+      ripenessUpdateSource: updateSource,
+      ripenessUpdatedAt: updatedAt,
     );
     _records[scanId] = updated;
     _emit();

@@ -14,6 +14,13 @@ abstract final class PersistenceCodecs {
 
   static const resultOriginCodes = <String>{'demo', 'on_device_model'};
 
+  static const ripenessUpdateSourceCodes = <String>{
+    'initial',
+    'manual',
+    'upload_rescan',
+    'live_rescan',
+  };
+
   static const syncStateCodes = <String>{
     'local_only',
     'pending',
@@ -72,6 +79,25 @@ abstract final class PersistenceCodecs {
     'on_device_model' => ResultOrigin.onDeviceModel,
     _ => throw FormatException('Unknown persisted result-origin code: $value'),
   };
+
+  static String encodeRipenessUpdateSource(RipenessUpdateSource value) =>
+      switch (value) {
+        RipenessUpdateSource.initial => 'initial',
+        RipenessUpdateSource.manual => 'manual',
+        RipenessUpdateSource.uploadRescan => 'upload_rescan',
+        RipenessUpdateSource.liveRescan => 'live_rescan',
+      };
+
+  static RipenessUpdateSource decodeRipenessUpdateSource(String value) =>
+      switch (value) {
+        'initial' => RipenessUpdateSource.initial,
+        'manual' => RipenessUpdateSource.manual,
+        'upload_rescan' => RipenessUpdateSource.uploadRescan,
+        'live_rescan' => RipenessUpdateSource.liveRescan,
+        _ => throw FormatException(
+          'Unknown persisted ripeness-update source: $value',
+        ),
+      };
 
   static String encodeSyncState(LocalSyncState value) => switch (value) {
     LocalSyncState.localOnly => 'local_only',

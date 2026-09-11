@@ -21,6 +21,13 @@ provide account sign-in, synchronization, and private photo backup.
   expands with **Read less**, without showing a summary in the collapsed state
 - Human ripeness adjustment before or after saving, with the adjusted stage
   persisted to History and used for shelf-life guidance
+- Saved real assessments can update ripeness manually or through same-fruit
+  Upload/Live rescans without changing their Fruit ID or History record;
+  completed-order batches and Demo records are read-only for this action
+- The saved-detail update action lives in the Saved assessment card. Its
+  chooser presents side-by-side primary Upload and Live Scan actions with a
+  secondary manual update action; batch management keeps only batch controls,
+  and Delete saved scan is styled as a destructive action
 - Permanent workspace-scoped physical-fruit IDs (`CH-000001`), with IDs
   allocated to Upload, Live, and Demo saves
 - Upload-only label suggestion and sticker-style Fruit ID card; Live and Demo

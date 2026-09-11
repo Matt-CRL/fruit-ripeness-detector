@@ -88,6 +88,7 @@ final class RemoteSyncRecord {
     required this.values,
     required this.revision,
     required this.serverChangedAt,
+    this.hasPendingImageUpload = false,
   });
 
   final SyncTable table;
@@ -96,6 +97,11 @@ final class RemoteSyncRecord {
   final Map<String, Object?> values;
   final int revision;
   final DateTime serverChangedAt;
+
+  /// Local-only coordination metadata. It is never sent to or read from the
+  /// remote payload, but prevents assessment metadata from being pushed while
+  /// its replacement image is still waiting to upload.
+  final bool hasPendingImageUpload;
 }
 
 sealed class PushResult {

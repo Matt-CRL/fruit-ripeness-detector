@@ -30,6 +30,7 @@ final class AdjustSavedScanRipenessUseCase {
     required RipenessStage ripeness,
     required String modelVersion,
     required ShelfLifeEstimate shelfLife,
+    DateTime? expectedUpdatedAt,
   }) async {
     try {
       return await _repository.updateRipeness(
@@ -38,6 +39,8 @@ final class AdjustSavedScanRipenessUseCase {
         modelVersion: modelVersion,
         shelfLife: shelfLife,
         updatedAt: _utcNow(),
+        expectedUpdatedAt: expectedUpdatedAt,
+        updateSource: RipenessUpdateSource.manual,
       );
     } on SavedScanRipenessAdjustmentException {
       rethrow;

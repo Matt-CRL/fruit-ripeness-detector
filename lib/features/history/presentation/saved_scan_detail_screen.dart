@@ -6,6 +6,7 @@ import 'package:kami/app/router/main_shell.dart';
 import 'package:kami/features/batches/application/batch_actions.dart';
 import 'package:kami/features/batches/presentation/batch_providers.dart';
 import 'package:kami/features/history/application/delete_saved_scan.dart';
+import 'package:kami/features/history/application/adjust_saved_scan_ripeness.dart';
 import 'package:kami/features/history/domain/saved_scan_record.dart';
 import 'package:kami/features/history/presentation/history_providers.dart';
 import 'package:kami/features/history/presentation/history_screen.dart';
@@ -14,9 +15,11 @@ import 'package:kami/features/history/presentation/saved_scan_image.dart';
 import 'package:kami/features/orders/domain/batch_order.dart';
 import 'package:kami/features/orders/presentation/order_providers.dart';
 import 'package:kami/features/scan/domain/scan_models.dart';
+import 'package:kami/features/scan/application/scan_service_providers.dart';
 import 'package:kami/features/scan/presentation/model_confidence_indicator.dart';
 import 'package:kami/features/scan/presentation/ripeness_stage_style.dart';
 import 'package:kami/features/scan/presentation/shelf_life_guidance_card.dart';
+import 'package:kami/features/scan/presentation/scan_screens.dart';
 
 class SavedScanDetailScreen extends ConsumerWidget {
   const SavedScanDetailScreen({
@@ -86,7 +89,9 @@ class _SavedScanDetails extends StatelessWidget {
       brightness: Theme.of(context).brightness,
     );
 
-    final isUserAdjusted = record.modelVersion.contains('adjusted');
+    final isUserAdjusted =
+        record.ripenessUpdateSource == RipenessUpdateSource.manual ||
+        record.modelVersion.contains('adjusted');
 
     return ListView(
       padding: EdgeInsets.fromLTRB(
@@ -230,6 +235,11 @@ class _SavedScanDetails extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (!openedFromAddScans &&
+                            record.resultOrigin != ResultOrigin.demo) ...[
+                          const SizedBox(height: 16),
+                          _SavedScanUpdateAction(record: record),
+                        ],
                       ],
                     ),
                   ),
@@ -251,6 +261,19 @@ class _SavedScanDetails extends StatelessWidget {
                           label: 'Saved',
                           value: formatSavedAt(record.createdAt),
                         ),
+                        if (record.ripenessUpdateSource !=
+                            RipenessUpdateSource.initial) ...[
+                          const Divider(height: 24),
+                          _DetailRow(
+                            label: 'Last updated',
+                            value: formatSavedAt(record.ripenessUpdatedAt),
+                          ),
+                          const Divider(height: 24),
+                          _DetailRow(
+                            label: 'Update source',
+                            value: record.ripenessUpdateSource.displayName,
+                          ),
+                        ],
                         const Divider(height: 24),
                         _DetailRow(
                           label: 'Model version',
@@ -286,6 +309,129 @@ class _SavedScanDetails extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _SavedScanUpdateAction extends ConsumerStatefulWidget {
+  const _SavedScanUpdateAction({required this.record});
+
+  final SavedScanRecord record;
+
+  @override
+  ConsumerState<_SavedScanUpdateAction> createState() =>
+      _SavedScanUpdateActionState();
+}
+
+class _SavedScanUpdateActionState
+    extends ConsumerState<_SavedScanUpdateAction> {
+  bool _working = false;
+  String? _errorMessage;
+
+  Future<void> _openUpdateOptions() async {
+    if (_working) return;
+    final choice = await showModalBottomSheet<_SavedScanUpdateChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => const _SavedScanUpdateOptionsSheet(),
+    );
+    if (!mounted || choice == null) return;
+
+    switch (choice) {
+      case _SavedScanUpdateChoice.manual:
+        await _openManualUpdate();
+      case _SavedScanUpdateChoice.upload:
+        await context.push(AppRoutes.scanUpload, extra: widget.record);
+      case _SavedScanUpdateChoice.live:
+        await context.push(AppRoutes.scanLive, extra: widget.record);
+    }
+  }
+
+  Future<void> _openManualUpdate() async {
+    final record = widget.record;
+    final selectedStage = await showModalBottomSheet<RipenessStage>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => RipenessInterventionSheet(
+        currentRipeness: record.ripeness,
+        modelRipeness: record.ripeness,
+        fruit: record.fruit,
+        modelConfidence: record.modelConfidence,
+      ),
+    );
+    if (!mounted || selectedStage == null) return;
+
+    setState(() {
+      _working = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref
+          .read(adjustSavedScanRipenessUseCaseProvider)
+          .execute(
+            scanId: record.id,
+            ripeness: selectedStage,
+            modelVersion: record.modelVersion,
+            shelfLife: ref
+                .read(shelfLifeAdvisorProvider)
+                .estimate(
+                  ClassificationResult(
+                    fruit: record.fruit,
+                    ripeness: selectedStage,
+                    modelConfidence: record.modelConfidence,
+                    modelVersion: record.modelVersion,
+                    origin: record.resultOrigin,
+                    requiresRetake: false,
+                  ),
+                ),
+            expectedUpdatedAt: record.updatedAt,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved assessment updated.')),
+        );
+      }
+    } on SavedScanRipenessAdjustmentException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final batchId = widget.record.batchId;
+    final locked = batchId == null
+        ? false
+        : ref
+              .watch(batchSnapshotProvider(batchId))
+              .when(
+                data: (snapshot) => snapshot?.isLocked ?? false,
+                loading: () => false,
+                error: (error, stackTrace) => false,
+              );
+    if (locked) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _working ? null : _openUpdateOptions,
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Update fruit ripeness stage'),
+        ),
+        if (_errorMessage != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _errorMessage!,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -447,6 +593,7 @@ class _SavedScanManagementActionsState
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
+    final colorScheme = Theme.of(context).colorScheme;
     if (widget.openedFromAddScans) {
       if (record.batchId != null) {
         return const Text('This scan is no longer available to add.');
@@ -519,15 +666,29 @@ class _SavedScanManagementActionsState
 
     if (widget.openedFromHistory) {
       if (record.batchId != null) {
-        return FilledButton.icon(
-          onPressed: _working
-              ? null
-              : () => context.push(AppRoutes.batchDetails(record.batchId!)),
-          icon: const Icon(Icons.inventory_2_outlined),
-          label: const Text('View batch'),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: _working
+                  ? null
+                  : () => context.push(AppRoutes.batchDetails(record.batchId!)),
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('View batch'),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _errorMessage!,
+                style: TextStyle(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         );
       }
-      final colorScheme = Theme.of(context).colorScheme;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -555,6 +716,15 @@ class _SavedScanManagementActionsState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (locked && record.resultOrigin != ResultOrigin.demo) ...[
+          Text(
+            'Updates are unavailable because this scan belongs to a completed-order batch.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (!widget.openedFromBatchScans)
           FilledButton.icon(
             onPressed: _working
@@ -626,6 +796,9 @@ class _SavedScanManagementActionsState
             const SizedBox(height: 10),
             TextButton.icon(
               onPressed: _working ? null : _deleteScan,
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
               icon: const Icon(Icons.delete_outline),
               label: const Text('Delete saved scan'),
             ),
@@ -636,12 +809,67 @@ class _SavedScanManagementActionsState
           Text(
             _errorMessage!,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
+              color: colorScheme.error,
               fontWeight: FontWeight.w600,
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+enum _SavedScanUpdateChoice { manual, upload, live }
+
+class _SavedScanUpdateOptionsSheet extends StatelessWidget {
+  const _SavedScanUpdateOptionsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Rescan', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text('Choose how you want to update it.'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(_SavedScanUpdateChoice.upload),
+                    icon: const Icon(Icons.upload_file_outlined),
+                    label: const Text('Upload'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context).pop(_SavedScanUpdateChoice.live),
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: const Text('Live Scan'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pop(_SavedScanUpdateChoice.manual),
+              icon: const Icon(Icons.tune_outlined),
+              label: const Text('Update manually'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
