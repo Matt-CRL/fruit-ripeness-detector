@@ -21,8 +21,12 @@ fail() {
   exit 1
 }
 
-[[ -f "$workspace_dir/pubspec.yaml" && -f "$workspace_dir/android/gradlew" ]] \
-  || fail "Expected a Chami checkout mounted at ${workspace_dir} (it must contain pubspec.yaml and android/gradlew). Clone the GitHub repository, then mount its repository root there."
+[[ -f "$workspace_dir/pubspec.yaml" \
+  && -f "$workspace_dir/android/gradlew" \
+  && -f "$workspace_dir/android/gradlew.bat" \
+  && -f "$workspace_dir/android/gradle/wrapper/gradle-wrapper.jar" \
+  && -f "$workspace_dir/android/gradle/wrapper/gradle-wrapper.properties" ]] \
+  || fail "Expected a Chami checkout with the complete Gradle wrapper at ${workspace_dir} (pubspec.yaml, android/gradlew, android/gradlew.bat, and android/gradle/wrapper/gradle-wrapper.jar plus gradle-wrapper.properties). Clone the GitHub repository, then mount its repository root there."
 
 command -v mountpoint >/dev/null 2>&1 \
   || fail 'The mountpoint utility is unavailable; use the published Chami APK builder image.'
@@ -56,7 +60,7 @@ if [[ ! -x "$sdkmanager" ]]; then
 
   staging_dir="$download_dir/unpacked"
   mkdir -p "$staging_dir" "$android_home/cmdline-tools"
-  unzip --quiet "$archive" -d "$staging_dir" \
+  unzip -q "$archive" -d "$staging_dir" \
     || fail 'Android command-line-tools archive could not be unpacked.'
   [[ -x "$staging_dir/cmdline-tools/bin/sdkmanager" ]] \
     || fail 'The verified Android command-line-tools archive did not contain sdkmanager at the expected path.'
@@ -67,10 +71,8 @@ if [[ ! -x "$sdkmanager" ]]; then
 fi
 
 [[ -x "$sdkmanager" ]] || fail "sdkmanager is missing or not executable: ${sdkmanager}"
-"$sdkmanager" --sdk_root="$android_home" --licenses \
-  || fail 'Android SDK licenses were not accepted; refusing to build.'
 "$sdkmanager" --sdk_root="$android_home" --install "${REQUIRED_ANDROID_PACKAGES[@]}" \
-  || fail 'Required Android SDK packages could not be installed.'
+  || fail 'Required Android SDK packages could not be installed or their licenses were not accepted.'
 
 cd "$workspace_dir"
 flutter pub get --enforce-lockfile
