@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!.dockerignore
+!docker/
+docker/*
+!docker/build-apk.sh

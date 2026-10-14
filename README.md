@@ -54,7 +54,8 @@ provide account sign-in, synchronization, and private photo backup.
 
 ## Getting started
 
-Run commands from this `app/` directory.
+Run commands from the Flutter app directory (`app/` in this project workspace;
+the root of the cloned GitHub repository).
 
 Install dependencies:
 
@@ -111,6 +112,72 @@ flutter build apk --debug --dart-define-from-file=config/dev.json
 
 The debug APK is universal and much larger. Use a split release APK when
 sharing with testers.
+
+## Build a Chami debug APK with Docker
+
+The Docker image is a **build environment**; it does not run the Android app
+and does not include Chami's source code or Android SDK. The published image
+provides Flutter 3.44.7 and Java 17. Get the source from [GitHub](https://github.com/Matt-CRL/fruit-ripeness-detector)
+and the build environment from [Docker Hub](https://hub.docker.com/r/mattctrl/chami-apk-builder).
+
+### Use the published image
+
+You need Docker Desktop running, internet access for the first build, and
+several gigabytes of free disk space. In PowerShell, clone the repository and
+pull the image:
+
+```powershell
+git clone https://github.com/Matt-CRL/fruit-ripeness-detector.git
+Set-Location .\fruit-ripeness-detector
+docker pull mattctrl/chami-apk-builder:3.44.7
+```
+
+The Flutter app is at the root of the GitHub repository. Create persistent
+volumes for the Android SDK and build caches, then run the builder from that
+repository directory:
+
+```powershell
+docker volume create chami-android-sdk
+docker volume create chami-pub-cache
+docker volume create chami-gradle-cache
+$appPath = (Get-Location).Path
+docker run --rm -it `
+  --mount "type=bind,source=$appPath,target=/workspace" `
+  --mount type=volume,source=chami-android-sdk,target=/opt/android-sdk `
+  --mount type=volume,source=chami-pub-cache,target=/root/.pub-cache `
+  --mount type=volume,source=chami-gradle-cache,target=/root/.gradle `
+  mattctrl/chami-apk-builder:3.44.7
+```
+
+On the first run, review Google's [Android SDK terms](https://developer.android.com/studio/terms).
+The builder asks for confirmation before downloading Google's command-line
+tools, then `sdkmanager` asks you to interactively accept any SDK licenses.
+Declining stops the build. The Android SDK, accepted licenses, and dependency
+caches persist in the named volumes. The GitHub repository must be public or
+you must have permission to clone it.
+
+When the build finishes, the debug APK is in the cloned repository at
+`build/app/outputs/flutter-apk/app-debug.apk`. No `config/dev.json` is needed;
+the debug build uses Chami's offline Guest path.
+
+### Build or publish the image yourself
+
+To build the image locally, run this from the Flutter project root (the
+repository root on GitHub):
+
+```powershell
+docker build --platform linux/amd64 -t chami-apk-builder:3.44.7 .
+```
+
+To publish that local image from the Docker Hub owner account:
+
+```powershell
+docker login
+docker image tag chami-apk-builder:3.44.7 mattctrl/chami-apk-builder:3.44.7
+docker push mattctrl/chami-apk-builder:3.44.7
+```
+
+Never put a Docker password or access token in project files or chat.
 
 ## Model and data notes
 
