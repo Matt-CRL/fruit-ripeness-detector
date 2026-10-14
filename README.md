@@ -129,7 +129,7 @@ pull the image:
 ```powershell
 git clone https://github.com/Matt-CRL/fruit-ripeness-detector.git
 Set-Location .\fruit-ripeness-detector
-docker pull mattctrl/chami-apk-builder:3.44.7
+docker pull mattctrl/chami-apk-builder:3.44.7-clean-checkout
 ```
 
 The Flutter app is at the root of the GitHub repository. Create persistent
@@ -146,15 +146,18 @@ docker run --rm -it `
   --mount type=volume,source=chami-android-sdk,target=/opt/android-sdk `
   --mount type=volume,source=chami-pub-cache,target=/root/.pub-cache `
   --mount type=volume,source=chami-gradle-cache,target=/root/.gradle `
-  mattctrl/chami-apk-builder:3.44.7
+  mattctrl/chami-apk-builder:3.44.7-clean-checkout
 ```
 
 On the first run, review Google's [Android SDK terms](https://developer.android.com/studio/terms).
 The builder asks for confirmation before downloading Google's command-line
-tools, then `sdkmanager` asks you to interactively accept any SDK licenses.
-Declining stops the build. The Android SDK, accepted licenses, and dependency
-caches persist in the named volumes. The GitHub repository must be public or
-you must have permission to clone it.
+tools, then installs only Chami's required SDK packages: `platform-tools`,
+Android API 36, Build Tools 36.0.0, and NDK 28.2.13676358. Any license prompt
+is limited to those packages; unrelated emulator/system-image licenses such
+as MIPS are not needed. Declining a required license stops the build. The
+Android SDK, accepted licenses, and dependency caches persist in the named
+volumes. The GitHub repository must be public or you must have permission to
+clone it.
 
 When the build finishes, the debug APK is in the cloned repository at
 `build/app/outputs/flutter-apk/app-debug.apk`. No `config/dev.json` is needed;
@@ -166,15 +169,15 @@ To build the image locally, run this from the Flutter project root (the
 repository root on GitHub):
 
 ```powershell
-docker build --platform linux/amd64 -t chami-apk-builder:3.44.7 .
+docker build --platform linux/amd64 -t chami-apk-builder:3.44.7-clean-checkout .
 ```
 
 To publish that local image from the Docker Hub owner account:
 
 ```powershell
 docker login
-docker image tag chami-apk-builder:3.44.7 mattctrl/chami-apk-builder:3.44.7
-docker push mattctrl/chami-apk-builder:3.44.7
+docker image tag chami-apk-builder:3.44.7-clean-checkout mattctrl/chami-apk-builder:3.44.7-clean-checkout
+docker push mattctrl/chami-apk-builder:3.44.7-clean-checkout
 ```
 
 Never put a Docker password or access token in project files or chat.

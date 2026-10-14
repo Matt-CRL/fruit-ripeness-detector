@@ -1,0 +1,4 @@
+# The Docker builder runs POSIX shell scripts and the Gradle launcher on Linux.
+docker/*.sh text eol=lf
+android/gradlew text eol=lf
+android/gradlew.bat text eol=crlf

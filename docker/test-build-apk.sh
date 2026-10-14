@@ -42,7 +42,9 @@ cat >"$stub_bin/unzip" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${TEST_UNZIP_MODE:-ok}" == ok ]] || exit 1
-[[ "${1:-}" == --quiet ]] && shift
+[[ "${1:-}" == -q ]] \
+  || { printf 'unzip requires the Info-ZIP quiet flag -q\n' >&2; exit 2; }
+shift
 archive=$1
 shift
 [[ -f "$archive" && "$1" == -d ]]
@@ -56,6 +58,10 @@ cat >"$stub_bin/sdkmanager" <<'STUB'
 set -euo pipefail
 printf '%s\n' "$*" >>"$TEST_SDKMANAGER_LOG"
 if [[ " $* " == *' --licenses '* && "${TEST_LICENSE_MODE:-accept}" != accept ]]; then
+  exit 1
+fi
+if [[ " $* " == *' --install '* && "${TEST_LICENSE_MODE:-accept}" != accept ]]; then
+  printf 'Required SDK package licenses were not accepted.\n' >&2
   exit 1
 fi
 STUB
@@ -85,9 +91,12 @@ run_builder() {
 }
 prepare_project() {
   local workspace=$1
-  mkdir -p "$workspace/android"
+  mkdir -p "$workspace/android/gradle/wrapper"
   : >"$workspace/pubspec.yaml"
   : >"$workspace/android/gradlew"
+  : >"$workspace/android/gradlew.bat"
+  : >"$workspace/android/gradle/wrapper/gradle-wrapper.jar"
+  : >"$workspace/android/gradle/wrapper/gradle-wrapper.properties"
 }
 prepare_sdkmanager() {
   local sdk=$1
@@ -103,6 +112,20 @@ fi
 assert_contains "$out" 'Expected a Chami checkout'
 assert_contains "$out" 'mount its repository root there'
 [[ ! -e "$tmp_root/flutter.log" ]] || fail 'Flutter ran without a mounted Chami checkout'
+
+# A checkout with the launcher but without the wrapper JAR is incomplete and
+# must fail before SDK setup or Flutter starts.
+project="$tmp_root/project-missing-wrapper-jar"
+sdk="$tmp_root/sdk-missing-wrapper-jar"
+prepare_project "$project"
+prepare_sdkmanager "$sdk"
+rm "$project/android/gradle/wrapper/gradle-wrapper.jar"
+out="$tmp_root/missing-wrapper-jar.out"
+if run_builder "$project" "$sdk" yes accept '' "$out"; then
+  fail 'a checkout without the Gradle wrapper JAR unexpectedly succeeded'
+fi
+assert_contains "$out" 'complete Gradle wrapper'
+[[ ! -e "$tmp_root/flutter.log" ]] || fail 'Flutter ran without a complete Gradle wrapper'
 
 # A plain directory must not be mistaken for the required persistent SDK volume.
 project="$tmp_root/project-no-volume"
@@ -177,6 +200,10 @@ out="$tmp_root/success.out"
 run_builder "$project" "$sdk" yes accept '' "$out" || { sed -n '1,160p' "$out" >&2; fail 'mock successful build failed'; }
 assert_contains "$tmp_root/sdkmanager.log" 'platforms;android-36'
 assert_contains "$tmp_root/sdkmanager.log" 'ndk;28.2.13676358'
+assert_contains "$tmp_root/sdkmanager.log" '--install platform-tools platforms;android-36 build-tools;36.0.0 ndk;28.2.13676358'
+if grep -Fq -- ' --licenses' "$tmp_root/sdkmanager.log"; then
+  fail 'builder must not request unrelated SDK licenses beyond the required package install'
+fi
 assert_contains "$tmp_root/flutter.log" 'pub get --enforce-lockfile'
 assert_contains "$tmp_root/flutter.log" 'build apk --debug --no-pub'
 
@@ -195,7 +222,10 @@ run_builder "$project" "$sdk" yes accept $'YES\n' "$out" ok ok \
 [[ -x "$sdk/cmdline-tools/latest/bin/sdkmanager" ]] \
   || fail 'first-time SDK tools were not installed into the persistent volume'
 assert_contains "$tmp_root/curl.log" 'commandlinetools-linux-15859902_latest.zip'
-assert_contains "$tmp_root/sdkmanager.log" '--licenses'
+assert_contains "$tmp_root/sdkmanager.log" '--install platform-tools platforms;android-36 build-tools;36.0.0 ndk;28.2.13676358'
+if grep -Fq -- ' --licenses' "$tmp_root/sdkmanager.log"; then
+  fail 'first-time setup must not request unrelated SDK licenses'
+fi
 assert_contains "$tmp_root/flutter.log" 'build apk --debug --no-pub'
 
 # Keep only the bootstrap script from the docker/ directory in the image context.
@@ -211,4 +241,28 @@ if ! awk '
   fail '.dockerignore must re-exclude docker/ children before allowing only docker/build-apk.sh'
 fi
 
-printf 'PASS: nine build-apk bootstrap and context scenarios\n'
+# Keep the wrapper launchers and JAR in the GitHub source so a fresh clone can
+# use Flutter's Android build without relying on ignored local files.
+for wrapper_file in \
+  android/gradlew \
+  android/gradlew.bat \
+  android/gradle/wrapper/gradle-wrapper.jar \
+  android/gradle/wrapper/gradle-wrapper.properties; do
+  [[ -f "$wrapper_file" ]] || fail "GitHub source checkout is missing $wrapper_file"
+  if git check-ignore -q "$wrapper_file"; then
+    fail "GitHub source checkout still ignores $wrapper_file"
+  fi
+done
+
+# Git for Windows must check out Linux shell scripts with LF even when the
+# global core.autocrlf setting is true, or Docker may receive invalid scripts.
+for unix_script in docker/build-apk.sh docker/test-build-apk.sh android/gradlew; do
+  actual_eol=$(git check-attr eol -- "$unix_script" | awk -F ': ' '{print $3}')
+  [[ "$actual_eol" == lf ]] \
+    || fail "Git must preserve LF line endings for $unix_script"
+done
+actual_eol=$(git check-attr eol -- android/gradlew.bat | awk -F ': ' '{print $3}')
+[[ "$actual_eol" == crlf ]] \
+  || fail 'Git must preserve CRLF line endings for android/gradlew.bat'
+
+printf 'PASS: eleven build-apk bootstrap, wrapper, line-ending, and context scenarios\n'
